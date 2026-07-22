@@ -1,0 +1,6 @@
+{
+  "name": "TestArena",
+  "description": "एक पूर्ण-विशेषता (Full-Stack) वेबसाइट सभी प्रतियोगी परीक्षाओं (Competitive Exams) की तैयारी, पूर्व वर्षों के प्रश्न (PYQs), विषय-वार क्विज और करंट अफेयर्स के लिए।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
