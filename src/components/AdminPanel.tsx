@@ -872,6 +872,66 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     (q.exam && q.exam.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  const ADMIN_EMAIL = 'souravpatel13@gmail.com';
+  const isAuthorizedAdmin = user && user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+  if (authLoading) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center space-y-3 max-w-md mx-auto my-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto"></div>
+        <p className="text-xs font-bold text-gray-600">ऑथेंटिकेशन स्थिति की जाँच हो रही है...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto my-12 bg-white border border-gray-200 rounded-2xl p-8 shadow-sm text-center space-y-5">
+        <div className="w-14 h-14 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto border border-emerald-200">
+          <Lock className="h-7 w-7" />
+        </div>
+        <div>
+          <h2 className="text-base font-extrabold text-gray-900">प्रशासकीय लॉगिन (Admin Login Required)</h2>
+          <p className="text-xs text-gray-500 font-medium mt-1 leading-relaxed">
+            यह नियंत्रण कक्ष केवल अधिकृत प्रशासक (<span className="font-bold text-emerald-700">{ADMIN_EMAIL}</span>) के लिए सुरक्षित है।
+          </p>
+        </div>
+        <button
+          onClick={handleLogin}
+          disabled={authLoading}
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+        >
+          <Lock className="h-4 w-4" /> Google से लॉगिन करें
+        </button>
+      </div>
+    );
+  }
+
+  if (!isAuthorizedAdmin) {
+    return (
+      <div className="max-w-md mx-auto my-12 bg-white border border-red-200 rounded-2xl p-8 shadow-sm text-center space-y-5">
+        <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto border border-red-200">
+          <AlertCircle className="h-7 w-7" />
+        </div>
+        <div>
+          <h2 className="text-base font-extrabold text-gray-900">अनुमति नहीं है (Access Restricted)</h2>
+          <p className="text-xs text-gray-600 font-medium mt-2 leading-relaxed">
+            आप <span className="font-bold text-gray-900">{user.email}</span> के रूप में लॉग-इन हैं।
+          </p>
+          <p className="text-xs text-red-600 font-semibold mt-1">
+            केवल प्रशासक खाता (<span className="underline font-bold">{ADMIN_EMAIL}</span>) ही Admin Panel का उपयोग कर सकता है।
+          </p>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="w-full bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-600 text-xs font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer border border-gray-200"
+        >
+          <LogOut className="h-4 w-4" /> लॉग आउट करें
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Banner / Header */}
