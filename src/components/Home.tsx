@@ -8,55 +8,54 @@ import {
   TrendingUp, 
   ChevronRight,
   ShieldAlert,
-  Users
+  Users,
+  GraduationCap
 } from 'lucide-react';
+import { ExamInfo } from '../types';
 
 interface HomeProps {
-  onNavigate: (tab: 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin') => void;
+  onNavigate: (tab: 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'exam-info') => void;
   questionsCount: number;
   quizzesCount: number;
+  exams?: ExamInfo[];
 }
 
-export default function Home({ onNavigate, questionsCount, quizzesCount }: HomeProps) {
+export default function Home({ onNavigate, questionsCount, quizzesCount, exams = [] }: HomeProps) {
   const successPoints = [
     {
-      title: 'Master Core Concepts & Syllabus (पाठ्यक्रम पर मजबूत पकड़)',
-      desc: 'सभी प्रतियोगी परीक्षाओं में सफलता की बुनियाद आपके वैचारिक ज्ञान (conceptual clarity) पर टिकी होती है। इतिहास, भूगोल, राजव्यवस्था और समसामयिकी विषयों का गहन अध्ययन करें और प्रत्येक अध्याय के नोट्स बनाएं।',
+      title: 'Master Core Concepts & Syllabus',
+      desc: 'अवधारणात्मक स्पष्टता और विषयों पर मज़बूत पकड़ के साथ अध्ययन करें।',
     },
     {
-      title: 'Analyze Previous Years Questions - PYQs (विगत वर्षों के प्रश्न)',
-      desc: 'पिछले 10 वर्षों के प्रश्न पत्रों का नियमित अभ्यास सबसे महत्वपूर्ण कदम है। इससे परीक्षा के पैटर्न, प्रश्नों के स्तर (difficulty level) और बार-बार पूछे जाने वाले विषयों (weightage) का सटीक अनुमान लगता है।',
+      title: 'Analyze Previous Years Questions (PYQs)',
+      desc: 'विगत 10 वर्षों के प्रश्न पत्रों का नियमित अभ्यास कर परीक्षा पैटर्न समझें।',
     },
     {
-      title: 'Regular Self-Evaluation & Mock Tests (समयबद्ध मॉक टेस्ट)',
-      desc: 'केवल पढ़ना काफी नहीं है। परीक्षा हॉल जैसी स्थिति में, निर्धारित समय सीमा के भीतर प्रश्नों को हल करने का अभ्यास करें। यह आपकी गति (speed), सटीकता (accuracy) और निर्णय क्षमता को बढ़ाता है।',
+      title: 'Timed Mock Tests & Self-Evaluation',
+      desc: 'वास्तविक परीक्षा माहौल में हल कर अपनी गति और सटीकता बढ़ाएं।',
     },
     {
-      title: 'Active Recall & Mistakes Review Panel (गलतियों से सीखें)',
-      desc: 'जब भी कोई प्रश्न गलत हो, उसके विस्तृत हिंदी समाधान (detailed Hindi explanation) को ध्यान से पढ़ें। हमारे Mistakes Tracker का उपयोग करें ताकि जिन प्रश्नों में आप पहले असफल रहे हैं, उन्हें दोबारा कभी गलत न करें।',
-    },
-    {
-      title: 'Conceptual Mastery (संकल्पनात्मक दक्षता)',
-      desc: 'प्रतियोगी परीक्षाओं में अक्सर संकल्पनाओं को स्पष्ट रूप से समझना महत्वपूर्ण होता है। हमारी टेस्ट सीरीज में प्रत्येक प्रश्न का हल अत्यंत स्पष्ट हिंदी भाषा में उपलब्ध कराया गया है ताकि आपकी समझ अटूट रहे।',
+      title: 'Mistakes Tracker & Detailed Explanations',
+      desc: 'गलत उत्तरों का विश्लेषणात्मक हिंदी हल देखकर अपनी कमियों में सुधार करें।',
     }
   ];
 
   const objectives = [
     {
-      title: 'Accessible Quality Prep (सुलभ और गुणवत्तापूर्ण तैयारी)',
-      desc: 'सभी ग्रामीण और शहरी क्षेत्रों के स्व-अध्ययन करने वाले छात्रों तक शून्य आर्थिक बाधा के साथ बेहतरीन गुणवत्ता वाले प्रैक्टिस सेट और विस्तृत विश्लेषणात्मक परिणाम प्रदान करना।',
+      title: 'Quality Practice for All',
+      desc: 'सभी अभ्यर्थियों के लिए निःशुल्क और उच्च गुणवत्ता वाले टेस्ट सेट।',
       icon: Compass,
       color: 'text-emerald-700 bg-emerald-50 border-emerald-100',
     },
     {
-      title: '100% Verified Answer Explanations (सत्यापित उत्तर व्याख्या)',
-      desc: 'सभी प्रश्नों को मानक पुस्तकों और आधिकारिक उत्तर कुंजियों के आधार पर तैयार किए गए अत्यंत स्पष्ट और त्रुटिहीन हिंदी स्पष्टीकरणों के साथ प्रस्तुत करना।',
+      title: '100% Verified Hindi Explanations',
+      desc: 'मानक पुस्तकों व उत्तर कुंजियों पर आधारित प्रामाणिक व्याख्या।',
       icon: Target,
       color: 'text-amber-700 bg-amber-50 border-amber-100',
     },
     {
-      title: 'Data-Driven Smart Advice (डेटा-संचालित स्मार्ट मार्गदर्शक)',
-      desc: 'आपके अभ्यास परिणामों का वास्तविक समय में मूल्यांकन कर आपके कमजोर विषयों को रेखांकित करना, ताकि आप अपने समय का सही दिशा में सदुपयोग कर सकें।',
+      title: 'Smart Progress Analytics',
+      desc: 'वास्तविक समय में कमजोर विषयों का सटीक विश्लेषण।',
       icon: TrendingUp,
       color: 'text-teal-700 bg-teal-50 border-teal-100',
     }
@@ -93,6 +92,13 @@ export default function Home({ onNavigate, questionsCount, quizzesCount }: HomeP
               className="bg-white/10 hover:bg-white/20 text-white font-extrabold px-6 py-3 rounded-xl text-xs transition-all border border-white/15 flex items-center gap-1 transform hover:-translate-y-0.5"
             >
               Start Subject Tests <ChevronRight className="h-4 w-4" />
+            </button>
+
+            <button
+              onClick={() => onNavigate('exam-info')}
+              className="bg-emerald-900/60 hover:bg-emerald-900/90 text-emerald-200 font-extrabold px-6 py-3 rounded-xl text-xs transition-all border border-emerald-700/80 flex items-center gap-1.5 transform hover:-translate-y-0.5 cursor-pointer"
+            >
+              <GraduationCap className="h-4 w-4 text-emerald-400" /> परीक्षा पैटर्न व सिलेबस
             </button>
           </div>
         </div>
@@ -136,6 +142,31 @@ export default function Home({ onNavigate, questionsCount, quizzesCount }: HomeP
           </div>
         </div>
       </div>
+
+      {/* Sleek Dedicated Exam & Syllabus Teaser Card */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-6 sm:p-8 text-white shadow-md flex flex-col md:flex-row items-center justify-between gap-6 border border-emerald-800/40">
+        <div className="space-y-2 text-center md:text-left">
+          <div className="inline-flex items-center gap-2 bg-emerald-800/60 text-emerald-300 text-[11px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
+            <GraduationCap className="h-4 w-4" />
+            परीक्षा गाइड व विस्तृत सिलेबस (Exam Info & Syllabus)
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+            CGPSC, व्यापमं व अन्य परीक्षाओं का सम्पूर्ण विवरण व सिलेबस
+          </h2>
+          <p className="text-xs sm:text-sm text-emerald-100/80 leading-relaxed max-w-2xl font-light">
+            परीक्षा की पात्रता (Eligibility), चयन प्रक्रिया, एग्जाम पैटर्न (Exam Pattern) और डाउनलोड योग्य सिलेबस PDF के लिए समर्पित नया पेज देखें।
+          </p>
+        </div>
+        <button
+          onClick={() => onNavigate('exam-info')}
+          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold px-6 py-3.5 rounded-xl text-xs transition shadow-md flex items-center gap-2 shrink-0 cursor-pointer"
+        >
+          <GraduationCap className="h-4 w-4" />
+          समर्पित सिलेबस पेज खोलें
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+
 
       {/* Main Section Grid: Strategy Guide vs Objectives */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">

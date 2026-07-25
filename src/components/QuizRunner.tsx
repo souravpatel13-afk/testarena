@@ -45,10 +45,8 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
   }, [questionIds, allQuestions]);
 
   const baseQuestions = useMemo(() => {
-    return quizType === 'pyq'
-      ? rawQuestions.filter(isPyq)
-      : rawQuestions.filter(isSubjectTestQuestion);
-  }, [rawQuestions, quizType]);
+    return rawQuestions;
+  }, [rawQuestions]);
 
   // Interactive Quiz Modes onboarding
   const [quizMode, setQuizMode] = useState<'practice' | 'exam' | null>(null);

@@ -44,7 +44,7 @@ export default function CurrentAffairsSelector({ items }: CurrentAffairsSelector
             समसामयिकी एवं महत्वपूर्ण खबरें (Current Affairs)
           </h1>
           <p className="text-xs md:text-sm text-gray-600 leading-relaxed">
-            सभी प्रतियोगी परीक्षाओं के लिए नवीनतम राष्ट्रीय, अंतर्राष्ट्रीय और छत्तीसगढ़ राज्य के महत्वपूर्ण करेंट अफेयर्स का मासिक संकलन। अपनी तैयारी को अपडेट रखने के लिए नियमित रूप से अध्ययन करें।
+            राष्ट्रीय, अंतर्राष्ट्रीय एवं छत्तीसगढ़ राज्य की महत्वपूर्ण समसामयिकी का मासिक संकलन।
           </p>
 
           {/* Filters & Search Row */}

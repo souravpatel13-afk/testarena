@@ -19,7 +19,7 @@ import {
   Home as HomeIcon,
   Newspaper
 } from 'lucide-react';
-import { Question, Quiz, User, CurrentAffairsItem } from './types';
+import { Question, Quiz, User, CurrentAffairsItem, ExamInfo } from './types';
 import Home from './components/Home';
 import Dashboard from './components/Dashboard';
 import PyqSelector from './components/PyqSelector';
@@ -29,17 +29,19 @@ import AboutUs from './components/AboutUs';
 import ContactUs from './components/ContactUs';
 import QuizRunner from './components/QuizRunner';
 import AdminPanel from './components/AdminPanel';
+import AboutExam from './components/AboutExam';
 import { PrivacyPolicy, TermsConditions, Disclaimer } from './components/LegalPages';
 import SEOHead from './components/SEOHead';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'privacy' | 'terms' | 'disclaimer'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'exam-info' | 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'privacy' | 'terms' | 'disclaimer'>('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Data State
   const [questions, setQuestions] = useState<Question[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [currentAffairs, setCurrentAffairs] = useState<CurrentAffairsItem[]>([]);
+  const [exams, setExams] = useState<ExamInfo[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,11 +60,12 @@ export default function App() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [questionsRes, quizzesRes, userRes, caRes] = await Promise.all([
+      const [questionsRes, quizzesRes, userRes, caRes, examRes] = await Promise.all([
         fetch('/api/questions'),
         fetch('/api/quizzes'),
         fetch('/api/user'),
-        fetch('/api/current-affairs')
+        fetch('/api/current-affairs'),
+        fetch('/api/exam-info')
       ]);
 
       if (!questionsRes.ok || !quizzesRes.ok || !userRes.ok || !caRes.ok) {
@@ -73,11 +76,13 @@ export default function App() {
       const qzData = await quizzesRes.json();
       const uData = await userRes.json();
       const caData = await caRes.json();
+      const examData = examRes.ok ? await examRes.json() : [];
 
       setQuestions(qData);
       setQuizzes(qzData);
       setCurrentUser(uData);
       setCurrentAffairs(caData);
+      setExams(examData);
     } catch (err: any) {
       setError(err.message || "Failed to synchronise database records");
     } finally {
@@ -153,10 +158,11 @@ export default function App() {
   // Header Nav Lists
   const navigationItems = [
     { id: 'home', label: 'Home', icon: HomeIcon },
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'exam-info', label: 'Exam Info & Syllabus', icon: GraduationCap },
     { id: 'pyqs', label: 'PYQs Practice', icon: History },
     { id: 'subjects', label: 'Subject Tests', icon: BookOpen },
     { id: 'current-affairs', label: 'Current Affairs', icon: Newspaper },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'about', label: 'About Us', icon: Info },
     { id: 'contact', label: 'Contact Us', icon: Mail },
     { id: 'admin', label: 'Admin Panel', icon: Settings },
@@ -300,11 +306,22 @@ export default function App() {
             {activeTab === 'home' && (
               <Home 
                 onNavigate={(tab) => {
-                  setActiveTab(tab);
+                  setActiveTab(tab as any);
                   setIsQuizRunning(false);
                 }}
                 questionsCount={questions.length}
                 quizzesCount={quizzes.length}
+                exams={exams}
+              />
+            )}
+
+            {activeTab === 'exam-info' && (
+              <AboutExam 
+                exams={exams} 
+                onNavigateToPractice={(examName) => {
+                  setActiveTab('pyqs');
+                  setIsQuizRunning(false);
+                }} 
               />
             )}
 
@@ -350,6 +367,8 @@ export default function App() {
               <AdminPanel 
                 questions={questions}
                 onRefreshQuestions={loadData}
+                exams={exams}
+                onRefreshExams={loadData}
               />
             )}
 

@@ -95,3 +95,31 @@ export interface CurrentAffairsItem {
   createdAt: string;
 }
 
+export interface ExamPatternStage {
+  stage: string; // e.g., "प्रारंभिक परीक्षा (Paper 1 & 2)"
+  duration: string; // e.g., "2 घंटे प्रति प्रश्न पत्र"
+  totalQuestions: string; // e.g., "100 प्रश्न"
+  totalMarks: string; // e.g., "200 अंक"
+  negativeMarking: string; // e.g., "1/3 माइनस मार्किंग (-0.66 अंक)"
+}
+
+export interface ExamSyllabusPaper {
+  paperName: string; // e.g., "सामान्य अध्ययन (General Studies)"
+  topics: string[]; // List of topics covered
+}
+
+export interface ExamInfo {
+  id: string;
+  examName: string; // e.g., "CGPSC Prelims"
+  shortTagline: string; // e.g., "छत्तीसगढ़ लोक सेवा आयोग राज्य सेवा परीक्षा"
+  category: string; // e.g., "PSC Exam", "Vyapam", "Teaching Exam"
+  overview: string; // Overview description in Hindi
+  eligibility: string; // Educational qualification & age limit
+  selectionProcess: string; // Selection stages
+  patterns: ExamPatternStage[];
+  syllabus: ExamSyllabusPaper[];
+  pdfUrl?: string; // Direct link to Syllabus PDF
+  richContent?: string; // Full MS Word style HTML/Markdown content with tables, links, PDFs, etc.
+  updatedAt: string;
+}
+

@@ -125,7 +125,7 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
             Practice Official Exam Papers
           </h1>
           <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-sans">
-            यहाँ विभिन्न परीक्षाओं के विगत वर्षों के आधिकारिक प्रश्न उपलब्ध हैं। आप इन्हें वास्तविक समयबद्ध माहौल में हल कर सकते हैं या विषयवार एवं टॉपिकवाइज़ अभ्यास कर सकते हैं।
+            विगत वर्षों के आधिकारिक प्रश्नों का परीक्षा-वार एवं टॉपिक-वार अभ्यास करें।
           </p>
 
           {/* Interactive Toggle Sub-tabs & Search in Banner */}

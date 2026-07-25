@@ -19,10 +19,31 @@ import {
   Save,
   Trash,
   Newspaper,
-  Edit
+  Edit,
+  GraduationCap,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  List,
+  ListOrdered,
+  Heading1,
+  Heading2,
+  Heading3,
+  Table,
+  Link,
+  FileCode,
+  Eye,
+  Edit3,
+  Sparkles,
+  Copy,
+  FileText,
+  Layout,
+  CheckCircle2,
+  UploadCloud
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Question } from '../types';
+import { Question, ExamInfo } from '../types';
 import { parseCorrectAnswer } from '../utils/quizHelpers';
 import { auth, googleSignIn, logout, getAccessToken, setAccessToken } from '../lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -30,6 +51,8 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 interface AdminPanelProps {
   questions: Question[];
   onRefreshQuestions: () => void;
+  exams?: ExamInfo[];
+  onRefreshExams?: () => void;
 }
 
 const cleanExamValue = (val: any): string | undefined => {
@@ -60,7 +83,7 @@ const isPyq = (q: Question): boolean => {
   return !!(q.exam && q.exam.trim() !== '');
 };
 
-export default function AdminPanel({ questions, onRefreshQuestions }: AdminPanelProps) {
+export default function AdminPanel({ questions, onRefreshQuestions, exams, onRefreshExams }: AdminPanelProps) {
   // Auth state
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -79,8 +102,13 @@ export default function AdminPanel({ questions, onRefreshQuestions }: AdminPanel
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [sheetSuccess, setSheetSuccess] = useState<string | null>(null);
 
+  // New state for Google Sheet Pull & Preview
+  const [sheetPreviewData, setSheetPreviewData] = useState<any[]>([]);
+  const [sheetPreviewType, setSheetPreviewType] = useState<'pyq' | 'subject' | 'currentAffairs'>('pyq');
+  const [sheetPullingType, setSheetPullingType] = useState<'pyq' | 'subject' | 'currentAffairs' | null>(null);
+
   // Navigation tabs for Admin
-  const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'excel' | 'manual' | 'list' | 'currentAffairs'>('sheets');
+  const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'excel' | 'manual' | 'list' | 'currentAffairs' | 'aboutExam'>('sheets');
   
   // Search and view states for list
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,16 +119,26 @@ export default function AdminPanel({ questions, onRefreshQuestions }: AdminPanel
   const [caLoading, setCaLoading] = useState(false);
   const [caMonth, setCaMonth] = useState('July 2026');
   const [caTitle, setCaTitle] = useState('');
-  const [caCategory, setCaCategory] = useState('National');
+  const [caCategory, setCaCategory] = useState('General');
   const [caContentHi, setCaContentHi] = useState('');
   const [caContentEn, setCaContentEn] = useState('');
   const [caSuccessMsg, setCaSuccessMsg] = useState<string | null>(null);
   const [caEditingId, setCaEditingId] = useState<string | null>(null);
 
+  // Exam Info (About Exam) States
+  const [examsList, setExamsList] = useState<ExamInfo[]>([]);
+  const [examLoading, setExamLoading] = useState(false);
+  const [examEditingId, setExamEditingId] = useState<string | null>(null);
+  
+  const [examName, setExamName] = useState('');
+  const [examCategory, setExamCategory] = useState('PSC Exams');
+  const [examRichContent, setExamRichContent] = useState('');
+  const [editorTab, setEditorTab] = useState<'visual' | 'code' | 'preview'>('visual');
+
   // Manual Form States
   const [textHi, setTextHi] = useState('');
   const [textEn, setTextEn] = useState('');
-  const [optionsHi, setOptionsHi] = useState<string[]>(['', '', '', '']); // 4 options (A, B, C, D)
+  const [optionsHi, setOptionsHi] = useState<string[]>(['', '', '', '']);
   const [optionsEn, setOptionsEn] = useState<string[]>(['', '', '', '']);
   const [correctAnswer, setCorrectAnswer] = useState<number>(0);
   const [subject, setSubject] = useState('Chhattisgarh General Knowledge');
@@ -117,14 +155,16 @@ export default function AdminPanel({ questions, onRefreshQuestions }: AdminPanel
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadSuccessMsg, setUploadSuccessMsg] = useState<string | null>(null);
   const [uploadErrorMsg, setUploadErrorMsg] = useState<string | null>(null);
-
-  const adminEmail = "souravpatel13@gmail.com";
+  const [parsedExcelQuestions, setParsedExcelQuestions] = useState<any[]>([]);
 
   // Preset Subjects
   const subjectsPreset = [
     "Chhattisgarh General Knowledge",
     "Indian Polity & Constitution",
     "Indian History",
+    "Geography of India & CG",
+    "Indian Economy",
+    "General Science & Tech",
     "Language (Hindi & Chhattisgarhi)",
     "General Aptitude (CSAT)"
   ];
@@ -133,17 +173,18 @@ export default function AdminPanel({ questions, onRefreshQuestions }: AdminPanel
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      // Retrieve the current cached token from our helper
-      const cachedToken = getAccessToken();
-      if (cachedToken) {
-        setToken(cachedToken);
+      if (currentUser) {
+        const storedToken = getAccessToken();
+        setToken(storedToken);
+      } else {
+        setToken(null);
       }
       setAuthLoading(false);
     });
 
-    // Load active settings (like Spreadsheet ID) from server
     fetchSettings();
     fetchCurrentAffairs();
+    fetchExams();
 
     return () => unsubscribe();
   }, []);
@@ -160,98 +201,15 @@ export default function AdminPanel({ questions, onRefreshQuestions }: AdminPanel
     }
   };
 
-  const handleSubmitCurrentAffairs = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!caContentHi.trim() || !caMonth.trim()) {
-      alert("कृपया माह और विवरण (Hindi) अवश्य भरें।");
-      return;
-    }
-    setCaLoading(true);
-    setCaSuccessMsg(null);
-
-    const payload = {
-      id: caEditingId || undefined,
-      month: caMonth,
-      title: caMonth, // Use month as title
-      category: "General", // Use general as category
-      content_hi: caContentHi,
-      content_en: ""
-    };
-
+  const fetchExams = async () => {
     try {
-      const res = await fetch('/api/current-affairs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
+      const res = await fetch('/api/exam-info');
       if (res.ok) {
-        setCaSuccessMsg(caEditingId ? "करंट अफेयर्स सफलतापूर्वक अपडेट किया गया!" : "करंट अफेयर्स सफलतापूर्वक जोड़ा गया!");
-        setCaContentHi('');
-        setCaEditingId(null);
-        await fetchCurrentAffairs();
-        onRefreshQuestions();
-      } else {
-        alert("सहेजने में त्रुटि हुई।");
+        const data = await res.json();
+        setExamsList(data);
       }
     } catch (err) {
-      console.error(err);
-      alert("कनेक्टिविटी समस्या।");
-    } finally {
-      setCaLoading(false);
-    }
-  };
-
-  const handleDeleteCurrentAffairs = async (id: string) => {
-    if (!confirm("क्या आप वाकई इस करंट अफेयर्स को हटाना चाहते हैं?")) return;
-    try {
-      const res = await fetch(`/api/current-affairs/${id}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        await fetchCurrentAffairs();
-        onRefreshQuestions();
-        alert("सफलतापूर्वक हटा दिया गया।");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("त्रुटि हुई।");
-    }
-  };
-
-  const handleEditCurrentAffairs = (item: any) => {
-    setCaEditingId(item.id);
-    setCaMonth(item.month);
-    setCaTitle(item.title);
-    setCaCategory(item.category);
-    setCaContentHi(item.content_hi);
-    setCaContentEn(item.content_en || '');
-  };
-
-  const handleLogin = async () => {
-    setAuthLoading(true);
-    try {
-      const res = await googleSignIn();
-      if (res) {
-        setUser(res.user);
-        setToken(res.accessToken);
-        setAccessToken(res.accessToken);
-        
-        // Refresh settings on successful login
-        await fetchSettings();
-      }
-    } catch (err: any) {
-      alert("Login failed: " + err.message);
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    if (confirm("Are you sure you want to log out?")) {
-      await logout();
-      setUser(null);
-      setToken(null);
+      console.error("Failed to fetch exam info:", err);
     }
   };
 
@@ -290,490 +248,333 @@ export default function AdminPanel({ questions, onRefreshQuestions }: AdminPanel
     return false;
   };
 
-  // Google Sheets APIs
-  const createNewSheet = async (type: 'pyq' | 'subject' | 'ca') => {
-    if (!token) {
-      alert("सत्र समाप्त हो गया है या आप लॉग इन नहीं हैं। कृपया ऊपर दिए गए 'Google से लॉग इन करें' बटन से पुनः लॉग इन करें।");
-      return;
+  const extractSheetId = (inputStr: string): string => {
+    if (!inputStr) return '';
+    const trimmed = inputStr.trim();
+    const match = trimmed.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (match && match[1]) {
+      return match[1];
     }
+    return trimmed;
+  };
+
+  // Google Sheet Save & Sync Handlers
+  const handleSaveSheetIds = async () => {
+    const pyqId = extractSheetId(inputPyq);
+    const subjectId = extractSheetId(inputSubject);
+    const caId = extractSheetId(inputCA);
+
     setSheetSyncing(true);
     setSheetError(null);
     setSheetSuccess(null);
 
-    const sheetTitles = {
-      pyq: "CGPSC Quiz Portal - PYQ Practice Questions Database",
-      subject: "CGPSC Quiz Portal - Subject Test Questions Database",
-      ca: "CGPSC Quiz Portal - Current Affairs Database"
-    };
+    const ok = await saveSettingField({
+      spreadsheetIdPyq: pyqId,
+      spreadsheetIdSubject: subjectId,
+      spreadsheetIdCurrentAffairs: caId
+    });
 
-    const tabTitle = type === 'ca' ? "CurrentAffairs" : "Questions";
+    if (ok) {
+      setSpreadsheetIdPyq(pyqId);
+      setSpreadsheetIdSubject(subjectId);
+      setSpreadsheetIdCA(caId);
+      setSheetSuccess("गूगल शीट आईडी सर्वर पर सफलतापूर्वक सहेजी गईं!");
+    } else {
+      setSheetError("शीट आईडी सहेजने में त्रुटि हुई।");
+    }
+    setSheetSyncing(false);
+  };
+
+  const handlePullSheet = async (
+    sheetInputVal: string,
+    type: 'pyq' | 'subject' | 'currentAffairs',
+    action: 'preview' | 'import_append' | 'import_replace'
+  ) => {
+    if (!sheetInputVal || !sheetInputVal.trim()) {
+      setSheetError("कृपया एक गूगल शीट ID या URL दर्ज करें।");
+      return;
+    }
+
+    setSheetSyncing(true);
+    setSheetPullingType(type);
+    setSheetError(null);
+    setSheetSuccess(null);
 
     try {
-      const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+      await handleSaveSheetIds();
+
+      const res = await fetch('/api/pull-sheet', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          properties: {
-            title: sheetTitles[type]
-          },
-          sheets: [
-            {
-              properties: {
-                title: tabTitle,
-                gridProperties: {
-                  rowCount: 2000,
-                  columnCount: 13
-                }
-              }
-            }
-          ]
+          sheetInput: sheetInputVal,
+          sheetType: type,
+          action: action,
+          accessToken: token || undefined
         })
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message || "Failed to create Google Sheet");
-      }
-
       const data = await res.json();
-      const newId = data.spreadsheetId;
 
-      const fieldName = type === 'pyq' ? 'spreadsheetIdPyq' : type === 'subject' ? 'spreadsheetIdSubject' : 'spreadsheetIdCurrentAffairs';
-      const saved = await saveSettingField({ [fieldName]: newId });
-      if (saved) {
-        if (type === 'pyq') {
-          setSpreadsheetIdPyq(newId);
-          setInputPyq(newId);
-          setSheetSuccess("नया पीवायक्यू गूगल शीट सफलतापूर्वक बनाया और कनेक्ट किया गया!");
-          const pyqs = questions.filter(isPyq);
-          await pushQuestionsToSheet(newId, pyqs, token, "Questions");
-        } else if (type === 'subject') {
-          setSpreadsheetIdSubject(newId);
-          setInputSubject(newId);
-          setSheetSuccess("नया सब्जेक्ट टेस्ट गूगल शीट सफलतापूर्वक बनाया और कनेक्ट किया गया!");
-          const subs = questions.filter(q => !isPyq(q));
-          await pushQuestionsToSheet(newId, subs, token, "Questions");
-        } else {
-          setSpreadsheetIdCA(newId);
-          setInputCA(newId);
-          setSheetSuccess("नया करंट अफेयर्स गूगल शीट सफलतापूर्वक बनाया और कनेक्ट किया गया!");
-          await pushCurrentAffairsToSheet(newId, currentAffairs, token);
-        }
-      } else {
-        throw new Error("Failed to save Spreadsheet ID on the server.");
-      }
-    } catch (err: any) {
-      setSheetError(err.message || "An error occurred while creating the Google Sheet.");
-    } finally {
-      setSheetSyncing(false);
-    }
-  };
+      if (res.ok && data.success) {
+        setSheetSuccess(data.message);
+        setSheetPreviewData(data.items || []);
+        setSheetPreviewType(type);
 
-  const connectExistingSheet = async (type: 'pyq' | 'subject' | 'ca') => {
-    const inputVal = type === 'pyq' ? inputPyq : type === 'subject' ? inputSubject : inputCA;
-    if (!inputVal.trim()) {
-      alert("कृपया एक वैध गूगल शीट आईडी दर्ज करें।");
-      return;
-    }
-    setSheetSyncing(true);
-    setSheetError(null);
-    setSheetSuccess(null);
-
-    try {
-      if (!token) {
-        // Force save without validating via Google API
-        const fieldName = type === 'pyq' ? 'spreadsheetIdPyq' : type === 'subject' ? 'spreadsheetIdSubject' : 'spreadsheetIdCurrentAffairs';
-        const saved = await saveSettingField({ [fieldName]: inputVal.trim() });
-        if (saved) {
-          if (type === 'pyq') {
-            setSpreadsheetIdPyq(inputVal.trim());
-          } else if (type === 'subject') {
-            setSpreadsheetIdSubject(inputVal.trim());
-          } else {
-            setSpreadsheetIdCA(inputVal.trim());
+        if (action !== 'preview') {
+          onRefreshQuestions();
+          if (type === 'currentAffairs') {
+            fetchCurrentAffairs();
           }
-          setSheetSuccess("गूगल शीट आईडी सहेज ली गई है! शीट से डेटा सिंक (Pull/Push) करने के लिए कृपया ऊपर 'गूगल ड्राइव ऑथराइज़ करें' बटन दबाएं।");
-        } else {
-          throw new Error("सर्वर पर शीट आईडी सहेजने में विफल।");
         }
-        return;
-      }
-
-      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${inputVal.trim()}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!res.ok) {
-        throw new Error("दर्ज की गई शीट आईडी अमान्य है या आपको इसे एक्सेस करने की अनुमति नहीं है।");
-      }
-
-      const fieldName = type === 'pyq' ? 'spreadsheetIdPyq' : type === 'subject' ? 'spreadsheetIdSubject' : 'spreadsheetIdCurrentAffairs';
-      const saved = await saveSettingField({ [fieldName]: inputVal.trim() });
-      if (saved) {
-        if (type === 'pyq') {
-          setSpreadsheetIdPyq(inputVal.trim());
-        } else if (type === 'subject') {
-          setSpreadsheetIdSubject(inputVal.trim());
-        } else {
-          setSpreadsheetIdCA(inputVal.trim());
-        }
-        setSheetSuccess("गूगल शीट सफलतापूर्वक कनेक्ट हो गई!");
       } else {
-        throw new Error("सर्वर पर शीट आईडी सहेजने में विफल।");
+        setSheetError(data.error || "गूगल शीट से डेटा खींचने में त्रुटि हुई।");
       }
     } catch (err: any) {
-      setSheetError(err.message || "गूगल शीट से कनेक्ट करने में असमर्थ।");
+      setSheetError("कनेक्टिविटी समस्या: " + (err.message || String(err)));
     } finally {
       setSheetSyncing(false);
+      setSheetPullingType(null);
     }
   };
 
-  const disconnectSheet = async (type: 'pyq' | 'subject' | 'ca') => {
-    if (confirm("क्या आप वाकई इस गूगल शीट को डिस्कनेक्ट करना चाहते हैं? इससे गूगल ड्राइव में आपकी शीट डिलीट नहीं होगी, लेकिन ऐप उससे डेटा सिंक करना बंद कर देगा।")) {
-      setSheetSyncing(true);
-      const fieldName = type === 'pyq' ? 'spreadsheetIdPyq' : type === 'subject' ? 'spreadsheetIdSubject' : 'spreadsheetIdCurrentAffairs';
-      const saved = await saveSettingField({ [fieldName]: "" });
-      if (saved) {
-        if (type === 'pyq') {
-          setSpreadsheetIdPyq("");
-          setInputPyq("");
-        } else if (type === 'subject') {
-          setSpreadsheetIdSubject("");
-          setInputSubject("");
-        } else {
-          setSpreadsheetIdCA("");
-          setInputCA("");
-        }
-        setSheetSuccess("गूगल शीट सफलतापूर्वक डिस्कनेक्ट हो गई।");
-      }
-      setSheetSyncing(false);
-    }
-  };
-
-  // Rewrite all database questions of a specific type to Google Sheet
-  const pushQuestionsToSheet = async (id: string, qList: Question[], oauthToken: string, tabName: string = "Questions") => {
-    try {
-      const values = [
-        [
-          "ID", "Question_Hindi", 
-          "OptionA_Hindi", "OptionB_Hindi", "OptionC_Hindi", "OptionD_Hindi",
-          "CorrectAnswerIndex", "Subject", "Topic", "Exam", "Year", "Explanation_Hindi"
-        ],
-        ...qList.map(q => [
-          q.id,
-          q.text_hi,
-          q.options_hi[0] || "",
-          q.options_hi[1] || "",
-          q.options_hi[2] || "",
-          q.options_hi[3] || "",
-          q.correctAnswer,
-          q.subject,
-          q.topic,
-          q.exam || "",
-          q.year || "",
-          q.explanation_hi || ""
-        ])
-      ];
-
-      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${tabName}!A1:M2000?valueInputOption=USER_ENTERED`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${oauthToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          range: `${tabName}!A1:M2000`,
-          majorDimension: "ROWS",
-          values: values
-        })
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message || "Failed to write data to spreadsheet.");
-      }
-
-      return true;
-    } catch (err: any) {
-      console.error("Error pushing questions:", err);
-      throw err;
-    }
-  };
-
-  const pushCurrentAffairsToSheet = async (id: string, caList: any[], oauthToken: string) => {
-    try {
-      const values = [
-        ["ID", "Month", "Content_Hindi"],
-        ...caList.map(item => [
-          item.id,
-          item.month || "",
-          item.content_hi || ""
-        ])
-      ];
-
-      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/CurrentAffairs!A1:C2000?valueInputOption=USER_ENTERED`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${oauthToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          range: "CurrentAffairs!A1:C2000",
-          majorDimension: "ROWS",
-          values: values
-        })
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message || "Failed to write current affairs to spreadsheet.");
-      }
-
-      return true;
-    } catch (err: any) {
-      console.error("Error pushing current affairs:", err);
-      throw err;
-    }
-  };
-
-  const handlePush = async (type: 'pyq' | 'subject' | 'ca') => {
-    const sId = type === 'pyq' ? spreadsheetIdPyq : type === 'subject' ? spreadsheetIdSubject : spreadsheetIdCA;
-    if (!token) {
-      alert("सत्र समाप्त हो गया है या आप लॉग इन नहीं हैं। कृपया ऊपर दिए गए 'Google से लॉग इन करें' बटन से पुनः लॉग इन करें।");
-      return;
-    }
-    if (!sId) return;
+  const handleSyncAllSheets = async () => {
     setSheetSyncing(true);
     setSheetError(null);
     setSheetSuccess(null);
 
     try {
-      if (type === 'pyq') {
-        const pyqs = questions.filter(isPyq);
-        await pushQuestionsToSheet(sId, pyqs, token, "Questions");
-        setSheetSuccess(`सफलतापूर्वक ${pyqs.length} PYQ प्रश्नों को गूगल शीट पर पुश/अपडेट कर दिया गया है!`);
-      } else if (type === 'subject') {
-        const subQuestions = questions.filter(q => !isPyq(q));
-        await pushQuestionsToSheet(sId, subQuestions, token, "Questions");
-        setSheetSuccess(`सफलतापूर्वक ${subQuestions.length} सब्जेक्ट टेस्ट प्रश्नों को गूगल शीट पर पुश/अपडेट कर दिया गया है!`);
+      await handleSaveSheetIds();
+      let totalSynced = 0;
+      let syncMessages: string[] = [];
+
+      if (inputPyq.trim()) {
+        const res = await fetch('/api/pull-sheet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetInput: inputPyq, sheetType: 'pyq', action: 'import_append', accessToken: token || undefined })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          totalSynced += data.count || 0;
+          syncMessages.push(`PYQ: ${data.count} प्रश्न`);
+          setSheetPreviewData(data.items || []);
+          setSheetPreviewType('pyq');
+        } else if (data.error) {
+          syncMessages.push(`PYQ त्रुटि: ${data.error}`);
+        }
+      }
+
+      if (inputSubject.trim()) {
+        const res = await fetch('/api/pull-sheet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetInput: inputSubject, sheetType: 'subject', action: 'import_append', accessToken: token || undefined })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          totalSynced += data.count || 0;
+          syncMessages.push(`विषय-वार: ${data.count} प्रश्न`);
+        } else if (data.error) {
+          syncMessages.push(`विषय-वार त्रुटि: ${data.error}`);
+        }
+      }
+
+      if (inputCA.trim()) {
+        const res = await fetch('/api/pull-sheet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetInput: inputCA, sheetType: 'currentAffairs', action: 'import_append', accessToken: token || undefined })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          totalSynced += data.count || 0;
+          syncMessages.push(`करंट अफेयर्स: ${data.count} मदें`);
+          fetchCurrentAffairs();
+        } else if (data.error) {
+          syncMessages.push(`करंट अफेयर्स त्रुटि: ${data.error}`);
+        }
+      }
+
+      if (totalSynced > 0) {
+        setSheetSuccess(`सिंक सफल! (${syncMessages.join(' | ')})`);
+        onRefreshQuestions();
+      } else if (syncMessages.length > 0) {
+        setSheetError(syncMessages.join(' | '));
       } else {
-        await pushCurrentAffairsToSheet(sId, currentAffairs, token);
-        setSheetSuccess(`सफलतापूर्वक ${currentAffairs.length} करंट अफेयर्स को गूगल शीट पर पुश/अपडेट कर दिया गया है!`);
+        setSheetError("कृपया कम से कम एक गूगल शीट ID या URL दर्ज करें।");
       }
     } catch (err: any) {
-      setSheetError("शीट पर डेटा पुश करने में असमर्थ: " + err.message);
+      setSheetError("सिंक त्रुटि: " + (err.message || String(err)));
     } finally {
       setSheetSyncing(false);
     }
   };
 
-  const handlePull = async (type: 'pyq' | 'subject' | 'ca') => {
-    const sId = type === 'pyq' ? spreadsheetIdPyq : type === 'subject' ? spreadsheetIdSubject : spreadsheetIdCA;
-    if (!token) {
-      alert("सत्र समाप्त हो गया है या आप लॉग इन नहीं हैं। कृपया ऊपर दिए गए 'Google से लॉग इन करें' बटन से पुनः लॉग इन करें।");
-      return;
-    }
-    if (!sId) return;
-    setSheetSyncing(true);
-    setSheetError(null);
-    setSheetSuccess(null);
+  // Excel File Handlers
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadLoading(true);
+    setUploadErrorMsg(null);
+    setUploadSuccessMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data: any[] = XLSX.utils.sheet_to_json(ws);
+
+        const questionsParsed = data.map((r, idx) => {
+          const textHi = r['Question (HI)'] || r['Question'] || r['Question (Hindi)'] || r['question_hi'] || r['text_hi'] || '';
+          const textEn = r['Question (EN)'] || r['Question (English)'] || r['question_en'] || r['text_en'] || '';
+          const optA = r['Option A'] || r['Option A (HI)'] || r['Option 1'] || r['option_a'] || '';
+          const optB = r['Option B'] || r['Option B (HI)'] || r['Option 2'] || r['option_b'] || '';
+          const optC = r['Option C'] || r['Option C (HI)'] || r['Option 3'] || r['option_c'] || '';
+          const optD = r['Option D'] || r['Option D (HI)'] || r['Option 4'] || r['option_d'] || '';
+          const ansRaw = r['Correct Answer'] || r['Answer'] || r['correct_answer'] || r['CorrectAnswer'] || '0';
+
+          return {
+            id: `q-excel-${Date.now()}-${idx}`,
+            text_hi: textHi,
+            text_en: textEn,
+            options_hi: [optA, optB, optC, optD].filter(Boolean).length >= 2 ? [optA, optB, optC, optD] : ['विकल्प A', 'विकल्प B', 'विकल्प C', 'विकल्प D'],
+            options_en: [],
+            correctAnswer: parseCorrectAnswer(ansRaw, [optA, optB, optC, optD]),
+            subject: r['Subject'] || r['subject'] || 'Chhattisgarh General Knowledge',
+            topic: r['Topic'] || r['topic'] || 'सामान्य परिचय',
+            exam: r['Exam'] || r['exam'] || '',
+            year: r['Year'] ? parseInt(r['Year']) : undefined,
+            explanation_hi: r['Explanation (HI)'] || r['Explanation'] || r['explanation_hi'] || '',
+            explanation_en: r['Explanation (EN)'] || r['explanation_en'] || ''
+          };
+        }).filter(q => q.text_hi.trim() !== '');
+
+        if (questionsParsed.length === 0) {
+          setUploadErrorMsg("एक्सेल फाइल में कोई वैध प्रश्न नहीं मिला। कृपया कॉलम हेडिंग जांचें।");
+        } else {
+          setParsedExcelQuestions(questionsParsed);
+          setUploadSuccessMsg(`एक्सेल फाइल से ${questionsParsed.length} प्रश्न सफलतापूर्वक पढ़े गए! डेटाबेस में सहेजने के लिए नीचे बटन दबाएं।`);
+        }
+      } catch (err: any) {
+        setUploadErrorMsg("एक्सेल फाइल पढ़ने में विफल: " + err.message);
+      } finally {
+        setUploadLoading(false);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleSaveBulkQuestions = async (mode: 'append' | 'replace') => {
+    if (parsedExcelQuestions.length === 0) return;
+    setUploadLoading(true);
+    setUploadErrorMsg(null);
+    setUploadSuccessMsg(null);
 
     try {
-      const tabName = type === 'ca' ? "CurrentAffairs" : "Questions";
-      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sId}/values/${tabName}!A1:M2000`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const endpoint = mode === 'replace' ? '/api/questions/replace' : '/api/questions/bulk';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsedExcelQuestions)
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message || "Failed to fetch spreadsheet rows.");
-      }
-
-      const data = await res.json();
-      const rows = data.values;
-      if (!rows || rows.length <= 1) {
-        throw new Error("गूगल शीट खाली है या कोई रिकॉर्ड मौजूद नहीं है।");
-      }
-
-      if (type === 'ca') {
-        const parsedCA: any[] = [];
-        for (let i = 1; i < rows.length; i++) {
-          const r = rows[i];
-          if (!r || !r[1] || r[1].trim() === "") continue;
-
-          parsedCA.push({
-            id: r[0] || `ca-sheet-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 3)}`,
-            month: String(r[1]),
-            title: String(r[1]),
-            category: "General",
-            content_hi: r[2] ? String(r[2]) : "",
-            content_en: "",
-            createdAt: new Date().toISOString()
-          });
-        }
-
-        const replaceCA = await fetch('/api/current-affairs/replace', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(parsedCA)
-        });
-
-        if (replaceCA.ok) {
-          setSheetSuccess(`सफलतापूर्वक गूगल शीट से ${parsedCA.length} करंट अफेयर्स को सिंक और लोड कर लिया गया है!`);
-          await fetchCurrentAffairs();
-          onRefreshQuestions();
-        } else {
-          throw new Error("सर्वर पर करंट अफेयर्स सिंक करने में विफल।");
-        }
+      if (res.ok) {
+        setUploadSuccessMsg(mode === 'replace' 
+          ? `सभी पुराने प्रश्न हटाकर ${parsedExcelQuestions.length} नए प्रश्न सफलतापूर्वक सहेजे गए!`
+          : `${parsedExcelQuestions.length} प्रश्न डेटाबेस में सफलतापूर्वक जोड़े गए!`
+        );
+        setParsedExcelQuestions([]);
+        onRefreshQuestions();
       } else {
-        const headers = rows[0].map((h: any) => String(h).trim().toLowerCase());
-        
-        const findColIdx = (candidates: string[], fallback: number) => {
-          const idx = headers.findIndex((h: string) => candidates.some(c => h.includes(c) || c.includes(h)));
-          return idx !== -1 ? idx : fallback;
-        };
-
-        const idIdx = headers.indexOf("id") !== -1 ? headers.indexOf("id") : 0;
-        const textIdx = findColIdx(["question_hindi", "question_hi", "question", "text_hi", "text", "प्रश्न", "प्रश्न_hi"], 1);
-        const optAIdx = findColIdx(["optiona_hindi", "optiona", "option_hi_1", "option_1", "विकल्प_hi_1", "विकल्प_1", "विकल्पa"], 2);
-        const optBIdx = findColIdx(["optionb_hindi", "optionb", "option_hi_2", "option_2", "विकल्प_hi_2", "विकल्प_2", "विकल्पb"], 3);
-        const optCIdx = findColIdx(["optionc_hindi", "optionc", "option_hi_3", "option_3", "विकल्प_hi_3", "विकल्प_3", "विकल्पc"], 4);
-        const optDIdx = findColIdx(["optiond_hindi", "optiond", "option_hi_4", "option_4", "विकल्प_hi_4", "विकल्प_4", "विकल्पd"], 5);
-        const optEIdx = findColIdx(["optione_hindi", "optione", "option_hi_5", "option_5", "विकल्प_hi_5", "विकल्प_5", "विकल्पe"], 6);
-        const correctIdx = findColIdx(["correctanswerindex", "correctanswer", "correct", "answer", "सही_उत्तर", "उत्तर"], 7);
-        const subjectIdx = findColIdx(["subject", "विषय"], 8);
-        const topicIdx = findColIdx(["topic", "टॉपिक", "अध्याय"], 9);
-        const examIdx = findColIdx(["exam", "परीक्षा"], 10);
-        const yearIdx = findColIdx(["year", "वर्ष"], 11);
-        const explanationIdx = findColIdx(["explanation_hindi", "explanation_hi", "explanation", "व्याख्या", "स्पष्टीकरण"], 12);
-
-        const parsedQuestions: Question[] = [];
-        for (let i = 1; i < rows.length; i++) {
-          const r = rows[i];
-          if (!r || !r[textIdx] || String(r[textIdx]).trim() === "") continue;
-
-          // Parse 4 options (Option A to D)
-          const options_hi: string[] = [];
-          const indices = [optAIdx, optBIdx, optCIdx, optDIdx];
-          indices.forEach(idx => {
-            if (r[idx] !== undefined && String(r[idx]).trim() !== "") {
-              options_hi.push(String(r[idx]).trim());
-            }
-          });
-
-          const rawExam = r[examIdx] !== undefined ? String(r[examIdx]) : undefined;
-          const cleanedExam = cleanExamValue(rawExam);
-
-          const subjectVal = (r[subjectIdx] !== undefined && String(r[subjectIdx]).trim() !== "")
-            ? String(r[subjectIdx]).trim()
-            : "Chhattisgarh General Knowledge";
-
-          const topicVal = (r[topicIdx] !== undefined && String(r[topicIdx]).trim() !== "")
-            ? String(r[topicIdx]).trim()
-            : "General";
-
-          parsedQuestions.push({
-            id: (r[idIdx] !== undefined && String(r[idIdx]).trim() !== "") 
-              ? String(r[idIdx]).trim() 
-              : `q-sheet-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 3)}`,
-            text_hi: String(r[textIdx]),
-            options_hi: options_hi,
-            correctAnswer: parseCorrectAnswer(r[correctIdx], options_hi),
-            subject: subjectVal,
-            topic: topicVal,
-            exam: cleanedExam || (type === 'pyq' ? "CGPSC Prelims" : undefined),
-            year: r[yearIdx] !== undefined ? cleanYearValue(r[yearIdx]) : undefined,
-            explanation_hi: (r[explanationIdx] !== undefined && String(r[explanationIdx]).trim() !== "") 
-              ? String(r[explanationIdx]).trim() 
-              : undefined
-          });
-        }
-
-        let finalMergedQuestions: Question[] = [];
-        if (type === 'pyq') {
-          const existingSubject = questions.filter(q => !isPyq(q));
-          finalMergedQuestions = [...existingSubject, ...parsedQuestions];
-        } else {
-          const existingPyq = questions.filter(isPyq);
-          finalMergedQuestions = [...existingPyq, ...parsedQuestions];
-        }
-
-        const replaceRes = await fetch('/api/questions/replace', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(finalMergedQuestions)
-        });
-
-        if (replaceRes.ok) {
-          setSheetSuccess(`सफलतापूर्वक गूगल शीट से ${parsedQuestions.length} प्रश्नों को सिंक और लोड कर लिया गया है!`);
-          onRefreshQuestions();
-        } else {
-          throw new Error("सर्वर पर प्रश्न डेटा सिंक करने में विफल।");
-        }
+        setUploadErrorMsg("प्रश्नों को सहेजने में विफल।");
       }
     } catch (err: any) {
-      setSheetError("गूगल शीट से सिंक करने में असमर्थ: " + err.message);
+      setUploadErrorMsg("सर्वर त्रुटि: " + err.message);
     } finally {
-      setSheetSyncing(false);
+      setUploadLoading(false);
     }
   };
 
-  // Helper to handle manual option text changes
-  const handleOptionHiChange = (idx: number, val: string) => {
-    const copy = [...optionsHi];
-    copy[idx] = val;
-    setOptionsHi(copy);
+  const handleDownloadExcelTemplate = () => {
+    const sampleData = [
+      {
+        "Question (HI)": "छत्तीसगढ़ की राजधानी कौन सी है?",
+        "Question (EN)": "What is the capital of Chhattisgarh?",
+        "Option A": "बिलासपुर",
+        "Option B": "रायपुर",
+        "Option C": "दुर्ग",
+        "Option D": "रायगढ़",
+        "Correct Answer": "B",
+        "Subject": "Chhattisgarh General Knowledge",
+        "Topic": "सामान्य परिचय",
+        "Exam": "CGPSC Prelims",
+        "Year": 2024,
+        "Explanation (HI)": "छत्तीसगढ़ की वर्तमान प्रशासनिक राजधानी रायपुर (नवा रायपुर) है।"
+      },
+      {
+        "Question (HI)": "भारतीय संविधान के जनक किसे माना जाता है?",
+        "Question (EN)": "Who is known as the father of Indian Constitution?",
+        "Option A": "महात्मा गांधी",
+        "Option B": "डॉ. बी. आर. अम्बेडकर",
+        "Option C": "पंडित जवाहरलाल नेहरू",
+        "Option D": "डॉ. राजेन्द्र प्रसाद",
+        "Correct Answer": "B",
+        "Subject": "Indian Polity & Constitution",
+        "Topic": "संविधान सभा",
+        "Exam": "CG Vyapam Patwari",
+        "Year": 2023,
+        "Explanation (HI)": "डॉ. बी. आर. अम्बेडकर प्रारूप समिति के अध्यक्ष थे।"
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(sampleData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "QuestionsTemplate");
+    XLSX.writeFile(wb, "Questions_Upload_Template.xlsx");
   };
 
-  const handleOptionEnChange = (idx: number, val: string) => {
-    const copy = [...optionsEn];
-    copy[idx] = val;
-    setOptionsEn(copy);
-  };
-
-  // Submit manual question
+  // Manual Question Submit Handler
   const handleSubmitManual = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!textHi || optionsHi.filter(o => o.trim()).length < 2) {
-      alert("कृपया कम से कम हिंदी प्रश्न पाठ्य और 2 विकल्प प्रदान करें।");
+    if (!textHi.trim()) {
+      alert("कृपया प्रश्न (हिन्दी) अवश्य दर्ज करें।");
+      return;
+    }
+    if (optionsHi.filter(o => o.trim()).length < 2) {
+      alert("कम से कम 2 विकल्प दर्ज करना अनिवार्य है।");
       return;
     }
 
     setSubmittingManual(true);
     setManualSuccess(false);
 
-    // Clean up options (keep only up to non-empty options)
-    const validOptionsHi = optionsHi.filter(o => o.trim() !== '');
-    const validOptionsEn = optionsEn.filter((_, idx) => optionsHi[idx]?.trim() !== '');
-
-    const newId = "q-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5);
-
-    const payload: Question = {
-      id: newId,
+    const newQuestion = {
       text_hi: textHi,
-      text_en: textEn.trim() ? textEn : undefined,
-      options_hi: validOptionsHi,
-      options_en: validOptionsEn.some(o => o.trim()) ? validOptionsEn : undefined,
-      correctAnswer: Math.min(correctAnswer, validOptionsHi.length - 1),
-      subject,
-      topic: topic.trim() ? topic : "General",
-      exam: cleanExamValue(exam),
-      year: cleanYearValue(year),
-      explanation_hi: explanationHi.trim() ? explanationHi : undefined,
-      explanation_en: explanationEn.trim() ? explanationEn : undefined
+      text_en: textEn,
+      options_hi: optionsHi,
+      options_en: optionsEn,
+      correctAnswer: correctAnswer,
+      subject: subject || "Chhattisgarh General Knowledge",
+      topic: topic || "General",
+      exam: exam || "",
+      year: year ? Number(year) : undefined,
+      explanation_hi: explanationHi,
+      explanation_en: explanationEn
     };
 
     try {
-      const response = await fetch('/api/questions', {
+      const res = await fetch('/api/questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(newQuestion)
       });
 
-      if (response.ok) {
+      if (res.ok) {
         setManualSuccess(true);
         setTextHi('');
         setTextEn('');
@@ -784,975 +585,1151 @@ export default function AdminPanel({ questions, onRefreshQuestions }: AdminPanel
         setExam('');
         setExplanationHi('');
         setExplanationEn('');
-        
-        // Auto Sync with Google Sheet if connected!
-        const isQPyq = isPyq(payload);
-        const sId = isQPyq ? spreadsheetIdPyq : spreadsheetIdSubject;
-        if (sId && token) {
-          const matchingQuestions = [...questions, payload].filter(q => isQPyq ? isPyq(q) : !isPyq(q));
-          await pushQuestionsToSheet(sId, matchingQuestions, token, "Questions");
-        }
-
         onRefreshQuestions();
+        setTimeout(() => setManualSuccess(false), 4000);
       } else {
-        alert("Error: Failed to save question.");
+        alert("प्रश्न सहेजने में विफलता।");
       }
-    } catch (err) {
-      console.error(err);
-      alert("Connectivity problem occurred.");
+    } catch (err: any) {
+      alert("सर्वर त्रुटि: " + err.message);
     } finally {
       setSubmittingManual(false);
     }
   };
 
-  // Delete Question from database and Google Sheet (if connected)
-  const handleDeleteQuestion = async (id: string) => {
-    if (!confirm("क्या आप वाकई इस प्रश्न को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।")) return;
+  // Exam Info handlers
+  const resetExamForm = () => {
+    setExamEditingId(null);
+    setExamName('');
+    setExamCategory('PSC Exams');
+    setExamRichContent('');
+  };
 
-    try {
-      const res = await fetch(`/api/questions/${id}`, {
-        method: 'DELETE'
-      });
+  const appendToRichContent = (htmlSnippet: string) => {
+    setExamRichContent(prev => prev ? prev + '\n\n' + htmlSnippet : htmlSnippet);
+  };
 
-      if (res.ok) {
-        // Auto Sync with Google Sheet if connected!
-        const targetQ = questions.find(q => q.id === id);
-        if (targetQ) {
-          const isQPyq = isPyq(targetQ);
-          const sId = isQPyq ? spreadsheetIdPyq : spreadsheetIdSubject;
-          if (sId && token) {
-            const updatedMatchingList = questions.filter(q => q.id !== id && (isQPyq ? isPyq(q) : !isPyq(q)));
-            await pushQuestionsToSheet(sId, updatedMatchingList, token, "Questions");
-          }
-        }
+  const handleInsertTable = () => {
+    const rowsStr = prompt("तालिका में कितनी पंक्तियाँ (Rows) चाहिए? (उदा. 3)", "3");
+    if (!rowsStr) return;
+    const colsStr = prompt("तालिका में कितने कॉलम (Columns) चाहिए? (उदा. 4)", "4");
+    if (!colsStr) return;
+    
+    const rows = parseInt(rowsStr) || 3;
+    const cols = parseInt(colsStr) || 4;
 
-        onRefreshQuestions();
-        alert("प्रश्न सफलतापूर्वक हटा दिया गया है।");
-      } else {
-        alert("प्रश्न हटाने में विफल।");
+    let tableHtml = `<div class="overflow-x-auto my-4"><table class="w-full border-collapse border border-gray-300 text-xs"><thead><tr class="bg-emerald-800 text-white font-bold">`;
+    for (let c = 1; c <= cols; c++) {
+      tableHtml += `<th class="border border-gray-300 p-2 text-left">कॉलम ${c}</th>`;
+    }
+    tableHtml += `</tr></thead><tbody>`;
+    for (let r = 1; r <= rows; r++) {
+      tableHtml += `<tr class="${r % 2 === 0 ? 'bg-gray-50' : 'bg-white'}">`;
+      for (let c = 1; c <= cols; c++) {
+        tableHtml += `<td class="border border-gray-300 p-2">डेटा ${r}.${c}</td>`;
       }
-    } catch (err) {
-      console.error("Delete failed:", err);
-      alert("डेटाबेस से कनेक्ट करने में असमर्थ।");
+      tableHtml += `</tr>`;
+    }
+    tableHtml += `</tbody></table></div>`;
+    appendToRichContent(tableHtml);
+  };
+
+  const handleInsertLink = () => {
+    const text = prompt("लिंक का नाम दर्ज करें (Link Text):", "यहाँ क्लिक करें");
+    if (!text) return;
+    const url = prompt("वेबसाइट / लिंक URL दर्ज करें (Link URL):", "https://");
+    if (!url) return;
+    appendToRichContent(`<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 underline font-extrabold hover:text-emerald-800">${text} ↗</a>`);
+  };
+
+  const handleInsertPdfBtn = () => {
+    const title = prompt("PDF बटन का नाम:", "आधिकारिक सिलेबस PDF डाउनलोड करें");
+    if (!title) return;
+    const url = prompt("PDF लिंक (PDF URL):", "https://");
+    if (!url) return;
+    appendToRichContent(`<div class="my-4"><a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs shadow-sm transition">📄 ${title} (PDF) ↗</a></div>`);
+  };
+
+  const handleInsertCallout = () => {
+    const note = prompt("महत्वपूर्ण सूचना / टिप दर्ज करें:", "परीक्षा में 1/3 माइनस मार्किंग (-0.66) लागू रहेगी।");
+    if (!note) return;
+    appendToRichContent(`<div class="bg-amber-50/90 border-l-4 border-amber-500 p-4 my-4 rounded-r-2xl text-xs text-amber-950 space-y-1 shadow-xs"><strong>📌 महत्वपूर्ण सूचना (Note):</strong><p class="mt-1">${note}</p></div>`);
+  };
+
+  const handleInsertTemplate = (type: 'cgpsc' | 'vyapam' | 'teacher') => {
+    if (type === 'cgpsc') {
+      appendToRichContent(`
+<div class="space-y-6">
+  <h2 class="text-lg font-black text-gray-900 border-b border-gray-200 pb-2">CGPSC राज्य सेवा परीक्षा - विस्तृत विवरण व गाइड</h2>
+  <p class="text-xs text-gray-700 leading-relaxed">छत्तीसगढ़ लोक सेवा आयोग (CGPSC) द्वारा आयोजित राज्य सेवा परीक्षा की सम्पूर्ण जानकारी, विषयसूची व दिशा-निर्देश नीचे दिए गए हैं:</p>
+</div>
+      `.trim());
+    } else if (type === 'vyapam') {
+      appendToRichContent(`
+<div class="space-y-6">
+  <h2 class="text-lg font-black text-gray-900 border-b border-gray-200 pb-2">छत्तीसगढ़ व्यापमं (CG Vyapam) परीक्षा निर्देश व गाइड</h2>
+  <p class="text-xs text-gray-700 leading-relaxed">व्यापमं द्वारा आयोजित परीक्षाओं का सम्पूर्ण विवरण, पैटर्न और सिलेबस निर्देश यहाँ लिखें:</p>
+</div>
+      `.trim());
+    } else if (type === 'teacher') {
+      appendToRichContent(`
+<div class="space-y-6">
+  <h2 class="text-lg font-black text-gray-900 border-b border-gray-200 pb-2">शिक्षक भर्ती परीक्षा विवरण व सिलेबस गाइड</h2>
+  <p class="text-xs text-gray-700 leading-relaxed">शिक्षक भर्ती परीक्षा का सम्पूर्ण विवरण, अंक विभाजन व सिलेबस निर्देश:</p>
+</div>
+      `.trim());
     }
   };
 
-  // Download Sample CSV Template
-  const handleDownloadTemplate = () => {
-    const csvContent = [
-      "text_hi,option_hi_1,option_hi_2,option_hi_3,option_hi_4,option_hi_5,correctAnswer,subject,topic,exam,year,explanation_hi",
-      `"छत्तीसगढ़ का राजकीय पशु कौन सा है?","वन भैंसा","बाघ","हाथी","शेर","हिरण",0,"Chhattisgarh General Knowledge","CG Basics","CGPSC Prelims",2021,"वन भैंसा छत्तीसगढ़ का राजकीय पशु है।"`,
-      `"भारतीय संविधान का जनक किसे माना जाता है?","डॉ. बी.आर. अम्बेडकर","महात्मा गांधी","जवाहरलाल नेहरू","सरदार पटेल","राजेंद्र प्रसाद",0,"Indian Polity & Constitution","Constitution History","CGPSC Prelims",2019,"डॉ. भीमराव अम्बेडकर को भारतीय संविधान का जनक माना जाता है।"`
-    ].join("\n");
+  const handleSubmitExam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!examName.trim()) {
+      alert("कृपया परीक्षा का नाम अवश्य दर्ज करें।");
+      return;
+    }
 
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", "cgpsc_questions_template.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+    setExamLoading(true);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
-    setUploadLoading(true);
-    setUploadSuccessMsg(null);
-    setUploadErrorMsg(null);
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const workbook = XLSX.read(bstr, { type: 'binary' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const rawJson = XLSX.utils.sheet_to_json<any>(worksheet);
-
-        if (rawJson.length === 0) {
-          throw new Error("The uploaded sheet contains no rows of data.");
-        }
-
-        // Map and validate columns
-        const mappedQuestions = rawJson.map((row, idx) => {
-          const text_hi = row.text_hi || row.question_hi || row["प्रश्न_hi"] || row["प्रश्न"] || row.text;
-          if (!text_hi) {
-            throw new Error(`Row ${idx + 2} does not contain text_hi (Hindi Question Text) which is required.`);
-          }
-
-          const text_en = row.text_en || row.question_en || row["प्रश्न_en"];
-          
-          // Reconstruct option lists (strictly 4 options A, B, C, D)
-          const options_hi: string[] = [];
-          const options_en: string[] = [];
-
-          for (let i = 1; i <= 4; i++) {
-            const optHiVal = row[`option_hi_${i}`] || row[`विकल्प_hi_${i}`] || row[`विकल्प_${i}`];
-            if (optHiVal !== undefined) {
-              options_hi.push(String(optHiVal));
-            }
-            const optEnVal = row[`option_en_${i}`] || row[`विकल्प_en_${i}`];
-            if (optEnVal !== undefined) {
-              options_en.push(String(optEnVal));
-            }
-          }
-
-          // Fallback options if columns not formatted like option_hi_X
-          if (options_hi.length === 0) {
-            if (row.options_hi) {
-              options_hi.push(...String(row.options_hi).split(';').slice(0, 4));
-            } else {
-              // try keys A, B, C, D
-              ['A', 'B', 'C', 'D'].forEach(key => {
-                if (row[key] !== undefined) options_hi.push(String(row[key]));
-              });
-            }
-          }
-
-          if (options_en.length === 0 && row.options_en) {
-            options_en.push(...String(row.options_en).split(';'));
-          }
-
-          if (options_hi.length < 2) {
-            throw new Error(`Line ${idx + 2} must contain at least 2 choice options.`);
-          }
-
-           // Correct answer index (0-indexed or 1-indexed)
-          let correctAnswer = 0;
-          const rawAns = row.correctAnswer !== undefined ? row.correctAnswer : (row.correct_answer || row.correct_option || row["सही_उत्तर"]);
-          if (rawAns !== undefined) {
-            correctAnswer = parseCorrectAnswer(rawAns, options_hi);
-          }
-
-          return {
-            id: row.id || "q-bulk-" + Date.now() + "-" + idx + "-" + Math.random().toString(36).substr(2, 4),
-            text_hi,
-            text_en: text_en ? String(text_en) : undefined,
-            options_hi,
-            options_en: options_en.length > 0 ? options_en : undefined,
-            correctAnswer,
-            subject: row.subject || row["विषय"] || "Chhattisgarh General Knowledge",
-            topic: row.topic || row["टॉपिक"] || "General",
-            exam: cleanExamValue(row.exam || row["परीक्षा"]),
-            year: cleanYearValue(row.year),
-            explanation_hi: row.explanation_hi || row.explanation || row["विवरण"] || undefined,
-            explanation_en: row.explanation_en || undefined
-          };
-        });
-
-        // Submit bulk questions to server API
-        const response = await fetch('/api/questions/bulk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(mappedQuestions)
-        });
-
-        if (response.ok) {
-          const resData = await response.json();
-          setUploadSuccessMsg(resData.message || `Successfully imported ${mappedQuestions.length} questions!`);
-          
-          // Auto Sync with Google Sheet if connected!
-          if (token) {
-            const allUpdated = [...questions, ...mappedQuestions];
-            if (spreadsheetIdPyq) {
-              const pyqs = allUpdated.filter(isPyq);
-              await pushQuestionsToSheet(spreadsheetIdPyq, pyqs, token, "Questions");
-            }
-            if (spreadsheetIdSubject) {
-              const subs = allUpdated.filter(q => !isPyq(q));
-              await pushQuestionsToSheet(spreadsheetIdSubject, subs, token, "Questions");
-            }
-          }
-
-          onRefreshQuestions();
-        } else {
-          const errData = await response.json();
-          throw new Error(errData.error || "Server bulk import failed.");
-        }
-
-      } catch (err: any) {
-        setUploadErrorMsg(err.message || "Failed to parse file. Make sure columns strictly align to our template sheet format.");
-      } finally {
-        setUploadLoading(false);
-      }
+    const payload = {
+      id: examEditingId || undefined,
+      examName,
+      category: examCategory,
+      richContent: examRichContent,
+      shortTagline: '',
+      overview: examRichContent,
+      eligibility: '',
+      selectionProcess: '',
+      patterns: [],
+      syllabus: [],
+      pdfUrl: ''
     };
 
-    reader.readAsBinaryString(file);
+    try {
+      const method = examEditingId ? 'PUT' : 'POST';
+      const url = examEditingId ? `/api/exam-info/${examEditingId}` : '/api/exam-info';
+      
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        alert(examEditingId ? "परीक्षा जानकारी सफलतापूर्वक अपडेट की गई!" : "नई परीक्षा सफलतापूर्वक जोड़ी गई!");
+        resetExamForm();
+        await fetchExams();
+        if (onRefreshExams) onRefreshExams();
+      } else {
+        alert("सहेजने में त्रुटि हुई।");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("सर्वर से संपर्क करने में समस्या हुई।");
+    } finally {
+      setExamLoading(false);
+    }
   };
 
-  // Filter list of questions based on search query
-  const filteredQuestions = questions.filter(q => {
-    return q.text_hi.toLowerCase().includes(searchQuery.toLowerCase()) || 
-           (q.text_en && q.text_en.toLowerCase().includes(searchQuery.toLowerCase())) ||
-           q.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           q.topic.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+  const handleEditExam = (item: ExamInfo) => {
+    setExamEditingId(item.id);
+    setExamName(item.examName || '');
+    setExamCategory(item.category || 'PSC Exams');
+    setExamRichContent(item.richContent || item.overview || '');
 
-  // Auth Gate Screen
-  if (authLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 rounded-3xl p-6 shadow-sm max-w-md mx-auto my-12 text-center space-y-4">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-amber-600"></div>
-        <p className="text-gray-500 font-semibold text-xs">सुरक्षा प्रमाणीकरण की जाँच की जा रही है...</p>
-      </div>
-    );
-  }
+    const el = document.getElementById('exam-form-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  };
 
-  const isUserAdmin = user && user.email === adminEmail;
+  const handleDeleteExam = async (id: string) => {
+    if (!confirm("क्या आप वाकई इस परीक्षा की जानकारी हटाना चाहते हैं?")) return;
+    try {
+      const res = await fetch(`/api/exam-info/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchExams();
+        if (onRefreshExams) onRefreshExams();
+        alert("सफलतापूर्वक हटा दिया गया।");
+      } else {
+        alert("हटाने में विफल।");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("हटाने में त्रुटि हुई।");
+    }
+  };
 
-  if (!user || !isUserAdmin) {
-    return (
-      <div className="max-w-md mx-auto my-12 p-8 bg-white border border-gray-100 rounded-3xl shadow-sm space-y-6 text-center">
-        <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl mx-auto flex items-center justify-center shadow-inner">
-          <Lock className="h-8 w-8" />
-        </div>
-        
-        <div className="space-y-2">
-          <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">एडमिन पैनल लॉगिन</h1>
-          <p className="text-xs text-gray-400 leading-relaxed font-sans">
-            यह सेक्शन केवल व्यवस्थापक के लिए है। कृपया गूगल शीट और प्रश्नों को प्रबंधित करने के लिए अपने अधिकृत ईमेल आईडी से लॉगिन करें।
-          </p>
-        </div>
+  // Current Affairs handlers
+  const handleSubmitCurrentAffairs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!caContentHi.trim() || !caMonth.trim()) {
+      alert("कृपया माह और विवरण (Hindi) अवश्य भरें।");
+      return;
+    }
+    setCaLoading(true);
+    setCaSuccessMsg(null);
 
-        {user && !isUserAdmin && (
-          <div className="bg-red-50 border border-red-200 text-red-800 text-[11px] p-3.5 rounded-xl flex items-start gap-2 text-left leading-relaxed">
-            <AlertCircle className="h-4.5 w-4.5 text-red-500 shrink-0 mt-0.5" />
-            <div>
-              <strong>पहुंच अस्वीकृत!</strong> आप <code className="bg-red-100/50 px-1 py-0.5 rounded font-mono font-bold text-red-900">{user.email}</code> के रूप में लॉग इन हैं। केवल अधिकृत ईमेल <code className="bg-red-100/50 px-1 py-0.5 rounded font-mono font-bold text-red-900">{adminEmail}</code> ही एडमिन पैनल खोल सकता है।
-            </div>
-          </div>
-        )}
+    const payload = {
+      id: caEditingId || undefined,
+      month: caMonth,
+      title: caMonth,
+      category: "General",
+      content_hi: caContentHi,
+      content_en: ""
+    };
 
-        <button
-          onClick={handleLogin}
-          className="w-full flex items-center justify-center gap-2.5 bg-white border border-gray-200 hover:border-gray-300 py-3 rounded-xl shadow-sm text-xs font-bold text-gray-700 hover:bg-gray-50 transition cursor-pointer"
-        >
-          <svg className="h-4 w-4 shrink-0" viewBox="0 0 48 48">
-            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-          </svg>
-          Google से लॉग इन करें
-        </button>
+    try {
+      const res = await fetch('/api/current-affairs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-        {user && (
-          <button
-            onClick={handleLogout}
-            className="text-[11px] text-gray-400 hover:text-gray-600 underline font-medium"
-          >
-            साइन आउट करें
-          </button>
-        )}
-      </div>
-    );
-  }
+      if (res.ok) {
+        setCaSuccessMsg(caEditingId ? "करंट अफेयर्स सफलतापूर्वक अपडेट किया गया!" : "करंट अफेयर्स सफलतापूर्वक जोड़ा गया!");
+        setCaContentHi('');
+        setCaEditingId(null);
+        await fetchCurrentAffairs();
+        onRefreshQuestions();
+      } else {
+        alert("सहेजने में त्रुटि हुई।");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("कनेक्टिविटी समस्या।");
+    } finally {
+      setCaLoading(false);
+    }
+  };
+
+  const handleEditCurrentAffairs = (item: any) => {
+    setCaEditingId(item.id);
+    setCaMonth(item.month || 'July 2026');
+    setCaContentHi(item.content_hi || '');
+  };
+
+  const handleDeleteCurrentAffairs = async (id: string) => {
+    if (!confirm("क्या आप वाकई इस करंट अफेयर्स को हटाना चाहते हैं?")) return;
+    try {
+      const res = await fetch(`/api/current-affairs/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        await fetchCurrentAffairs();
+        onRefreshQuestions();
+        alert("सफलतापूर्वक हटा दिया गया।");
+      } else {
+        alert("हटाने में विफल।");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("त्रुटि हुई।");
+    }
+  };
+
+  const handleLogin = async () => {
+    setAuthLoading(true);
+    try {
+      const res = await googleSignIn();
+      if (res) {
+        setUser(res.user);
+        setToken(res.accessToken);
+        setAccessToken(res.accessToken);
+        await fetchSettings();
+      }
+    } catch (err: any) {
+      alert("Login failed: " + err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (confirm("Are you sure you want to log out?")) {
+      await logout();
+      setUser(null);
+      setToken(null);
+    }
+  };
+
+  const handleDeleteQuestion = async (id: string) => {
+    if (!confirm("क्या आप वाकई इस प्रश्न को हटाना चाहते हैं?")) return;
+    try {
+      const res = await fetch(`/api/questions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) {
+        onRefreshQuestions();
+      } else {
+        alert("प्रश्न हटाने में विफलता।");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("सर्वर त्रुटि।");
+    }
+  };
+
+  const filteredQuestions = questions.filter(q => 
+    q.text_hi.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    q.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    q.topic.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (q.exam && q.exam.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   return (
-    <div className="space-y-6 font-sans max-w-7xl mx-auto px-1 sm:px-4 py-4" id="admin-panel-container">
-      
-      {/* Title Header */}
-      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="bg-amber-100 text-amber-800 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
-              ADMIN CONTROL
-            </span>
-            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              लॉग इन: {user.email}
-            </span>
+    <div className="space-y-6">
+      {/* Top Banner / Header */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl border border-emerald-100">
+            <Lock className="h-6 w-6" />
           </div>
-          <h1 className="text-xl font-extrabold text-gray-900 mt-1 flex items-center gap-2">
-            <Database className="text-amber-600 h-5 w-5" />
-            प्रबंधक डैशबोर्ड (Admin Panel)
-          </h1>
-          <p className="text-gray-500 text-xs leading-relaxed mt-0.5">
-            प्रश्नों को सीधे गूगल शीट (Google Sheet) से सिंक करें, नए प्रश्न जोड़ें या वर्तमान डेटाबेस को प्रबंधित करें।
-          </p>
+          <div>
+            <h1 className="text-base font-extrabold text-gray-900">
+              प्रशासकीय नियंत्रण कक्ष (Admin Panel)
+            </h1>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">
+              {user ? `लॉग-इन खाता: ${user.email}` : "प्रश्नों, करंट अफेयर्स व परीक्षा जानकारी को प्रबंधित करें"}
+            </p>
+          </div>
         </div>
 
-        {/* Panel Tabs Controls */}
-        <div className="flex flex-wrap bg-gray-100 p-1 rounded-xl border border-gray-200 shrink-0 gap-1">
-          <button
-            onClick={() => setActiveSubTab('sheets')}
-            className={`text-xs font-bold px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'sheets' ? 'bg-white text-amber-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5 inline text-emerald-600" /> Google Sheet Sync
-          </button>
-          <button
-            onClick={() => setActiveSubTab('excel')}
-            className={`text-xs font-bold px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'excel' ? 'bg-white text-amber-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            <Download className="h-3.5 w-3.5 inline" /> Excel Import
-          </button>
-          <button
-            onClick={() => setActiveSubTab('manual')}
-            className={`text-xs font-bold px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'manual' ? 'bg-white text-amber-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            <PlusCircle className="h-3.5 w-3.5 inline" /> Manual Entry
-          </button>
-          <button
-            onClick={() => setActiveSubTab('list')}
-            className={`text-xs font-bold px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'list' ? 'bg-white text-amber-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            <BookOpen className="h-3.5 w-3.5 inline" /> Questions List ({questions.length})
-          </button>
-          <button
-            onClick={() => setActiveSubTab('currentAffairs')}
-            className={`text-xs font-bold px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'currentAffairs' ? 'bg-white text-amber-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            <Newspaper className="h-3.5 w-3.5 inline" /> Current Affairs ({currentAffairs.length})
-          </button>
-          <button
-            onClick={handleLogout}
-            className="text-xs font-bold px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition flex items-center gap-1 ml-auto cursor-pointer"
-            title="लॉगआउट"
-          >
-            <LogOut className="h-3.5 w-3.5" /> Log Out
-          </button>
+        <div className="flex items-center gap-2">
+          {!user ? (
+            <button
+              onClick={handleLogin}
+              disabled={authLoading}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
+            >
+              <Lock className="h-4 w-4" /> Google से लॉग इन करें
+            </button>
+          ) : (
+            <button
+              onClick={handleLogout}
+              className="bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-600 text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 cursor-pointer border border-gray-200"
+            >
+              <LogOut className="h-4 w-4" /> लॉग आउट
+            </button>
+          )}
         </div>
       </div>
 
-      {/* RENDER ACTIVE TAB */}
-      <div id="admin-subtab-contents">
-        
+      {/* Main Subtab Navigation */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 pb-3">
+        <button
+          onClick={() => setActiveSubTab('sheets')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+            activeSubTab === 'sheets'
+              ? 'bg-emerald-800 text-white shadow-sm'
+              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <Database className="h-4 w-4" /> गूगल शीट सिंक
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('excel')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+            activeSubTab === 'excel'
+              ? 'bg-emerald-800 text-white shadow-sm'
+              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <FileSpreadsheet className="h-4 w-4" /> एक्सेल अपलोड
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('manual')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+            activeSubTab === 'manual'
+              ? 'bg-emerald-800 text-white shadow-sm'
+              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <PlusCircle className="h-4 w-4" /> प्रश्न जोड़ें
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('list')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+            activeSubTab === 'list'
+              ? 'bg-emerald-800 text-white shadow-sm'
+              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <Search className="h-4 w-4" /> प्रश्न सूची ({questions.length})
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('currentAffairs')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+            activeSubTab === 'currentAffairs'
+              ? 'bg-emerald-800 text-white shadow-sm'
+              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <Newspaper className="h-4 w-4" /> करंट अफेयर्स
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('aboutExam')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+            activeSubTab === 'aboutExam'
+              ? 'bg-emerald-800 text-white shadow-sm'
+              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <GraduationCap className="h-4 w-4" /> परीक्षा जानकारी (Word सम्पादक)
+        </button>
+      </div>
+
+      {/* Tab Panels */}
+      <div className="space-y-6">
+
         {/* GOOGLE SHEETS SYNC TAB */}
         {activeSubTab === 'sheets' && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 sm:p-8 space-y-8">
-            <div className="border-b border-gray-100 pb-4">
-              <h2 className="text-lg font-bold text-gray-800">गूगल शीट एकीकरण (Google Sheets Integration)</h2>
-              <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-                अपने प्रश्नों और करंट अफेयर्स को सुरक्षित रखने तथा सीधे गूगल शीट के माध्यम से अपडेट करने के लिए गूगल ड्राइव से कनेक्ट करें। प्रत्येक श्रेणी के लिए अलग-अलग शीट का उपयोग किया जाता है।
-              </p>
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-6">
+            <div className="border-b border-gray-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                  <Database className="h-5 w-5 text-emerald-600" /> गूगल शीट लाइव सिंक एवं डेटा पुल (Google Sheets Sync & Data Pull)
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  अपनी गूगल शीट ID या डायरेक्ट शेयरिंग URL दर्ज करें। आप हर शीट को लाइव चेक करके डेटा डेटाबेस में पुल कर सकते हैं।
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleSyncAllSheets}
+                  disabled={sheetSyncing}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <RefreshCw className={`h-4 w-4 ${sheetSyncing ? 'animate-spin' : ''}`} />
+                  {sheetSyncing ? "सिंक हो रहा है..." : "सभी शीट्स ऑटो-सिंक करें (Sync All)"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveSheetIds}
+                  disabled={sheetSyncing}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold px-3.5 py-2.5 rounded-xl text-xs transition cursor-pointer border border-gray-200"
+                >
+                  केवल IDs सहेजें
+                </button>
+              </div>
             </div>
 
-            {/* Google Drive Auth Status */}
-            <div className={`p-5 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm transition ${token ? 'bg-emerald-50/60 border-emerald-100 text-emerald-900' : 'bg-amber-50/60 border-amber-100 text-amber-900'}`}>
-              <div className="space-y-1">
+            {/* Notification Banners */}
+            {sheetSuccess && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between gap-2 shadow-xs">
                 <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full ${token ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}></span>
-                  <h3 className="font-extrabold text-xs tracking-wide uppercase">
-                    {token ? "✅ गूगल ड्राइव सफलतापूर्वक अधिकृत (Authorized)" : "⚠️ गूगल ड्राइव प्रमाणीकरण आवश्यक (Authorization Required)"}
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>{sheetSuccess}</span>
+                </div>
+                {sheetPreviewData.length > 0 && (
+                  <span className="bg-emerald-200 text-emerald-900 text-[10px] font-mono font-extrabold px-2.5 py-1 rounded-full">
+                    {sheetPreviewData.length} रिकॉर्ड मिले
+                  </span>
+                )}
+              </div>
+            )}
+            {sheetError && (
+              <div className="p-4 bg-red-50 border border-red-200 text-red-900 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs">
+                <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+                <span>{sheetError}</span>
+              </div>
+            )}
+
+            {/* Three Dedicated Google Sheet Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              
+              {/* CARD 1: PYQ SHEET */}
+              <div className="bg-emerald-50/40 border border-emerald-200/80 p-4 rounded-2xl flex flex-col justify-between space-y-3.5 shadow-2xs">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5">
+                      <GraduationCap className="h-4 w-4 text-emerald-700" /> 1. PYQ / परीक्षा प्रश्न शीट
+                    </label>
+                    {extractSheetId(inputPyq) && (
+                      <a
+                        href={`https://docs.google.com/spreadsheets/d/${extractSheetId(inputPyq)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] font-bold text-emerald-700 hover:underline flex items-center gap-1"
+                      >
+                        शीट खोलें <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="गूगल शीट लिंक (URL) या Sheet ID दर्ज करें..."
+                    value={inputPyq}
+                    onChange={(e) => setInputPyq(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-emerald-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono shadow-2xs"
+                  />
+                  <span className="text-[10px] text-gray-500 block">
+                    सहेजी गई ID: <code className="font-mono bg-white px-1 py-0.5 rounded border border-gray-200">{spreadsheetIdPyq || 'खाली'}</code>
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 pt-1 border-t border-emerald-100">
+                  <span className="text-[10px] font-extrabold text-emerald-900 block">डेटा पुल एवं इम्पोर्ट विकल्प:</span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handlePullSheet(inputPyq, 'pyq', 'preview')}
+                      disabled={sheetSyncing}
+                      className="bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold py-2 rounded-lg text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                      title="गूगल शीट से प्रश्नों को पढ़कर केवल नीचे टेबल में दिखाएं"
+                    >
+                      <Search className="h-3 w-3" /> जांचें
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePullSheet(inputPyq, 'pyq', 'import_append')}
+                      disabled={sheetSyncing}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 rounded-lg text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                      title="पुराने डेटा को बिना मिटाए नए प्रश्न जोड़ें"
+                    >
+                      <PlusCircle className="h-3 w-3" /> पुल व जोड़ें
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm("क्या आप वाकई गूगल शीट के प्रश्नों से पुराने प्रश्नों को रिप्लेस करना चाहते हैं?")) {
+                          handlePullSheet(inputPyq, 'pyq', 'import_replace');
+                        }
+                      }}
+                      disabled={sheetSyncing}
+                      className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold py-2 rounded-lg text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                      title="पुराने सभी प्रश्न हटाकर नया डेटा सेट करें"
+                    >
+                      <RefreshCw className="h-3 w-3" /> बदलें
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 2: SUBJECT-WISE SHEET */}
+              <div className="bg-blue-50/40 border border-blue-200/80 p-4 rounded-2xl flex flex-col justify-between space-y-3.5 shadow-2xs">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold text-blue-900 flex items-center gap-1.5">
+                      <FileSpreadsheet className="h-4 w-4 text-blue-700" /> 2. विषय-वार प्रश्न शीट
+                    </label>
+                    {extractSheetId(inputSubject) && (
+                      <a
+                        href={`https://docs.google.com/spreadsheets/d/${extractSheetId(inputSubject)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] font-bold text-blue-700 hover:underline flex items-center gap-1"
+                      >
+                        शीट खोलें <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="गूगल शीट लिंक (URL) या Sheet ID दर्ज करें..."
+                    value={inputSubject}
+                    onChange={(e) => setInputSubject(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono shadow-2xs"
+                  />
+                  <span className="text-[10px] text-gray-500 block">
+                    सहेजी गई ID: <code className="font-mono bg-white px-1 py-0.5 rounded border border-gray-200">{spreadsheetIdSubject || 'खाली'}</code>
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 pt-1 border-t border-blue-100">
+                  <span className="text-[10px] font-extrabold text-blue-900 block">डेटा पुल एवं इम्पोर्ट विकल्प:</span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handlePullSheet(inputSubject, 'subject', 'preview')}
+                      disabled={sheetSyncing}
+                      className="bg-white hover:bg-blue-100 text-blue-800 border border-blue-300 font-bold py-2 rounded-lg text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Search className="h-3 w-3" /> जांचें
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePullSheet(inputSubject, 'subject', 'import_append')}
+                      disabled={sheetSyncing}
+                      className="bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 rounded-lg text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <PlusCircle className="h-3 w-3" /> पुल व जोड़ें
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm("क्या आप वाकई विषय-वार गूगल शीट के प्रश्नों से पुराना डेटा बदलना चाहते हैं?")) {
+                          handlePullSheet(inputSubject, 'subject', 'import_replace');
+                        }
+                      }}
+                      disabled={sheetSyncing}
+                      className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold py-2 rounded-lg text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="h-3 w-3" /> बदलें
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 3: CURRENT AFFAIRS SHEET */}
+              <div className="bg-amber-50/40 border border-amber-200/80 p-4 rounded-2xl flex flex-col justify-between space-y-3.5 shadow-2xs">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
+                      <Newspaper className="h-4 w-4 text-amber-700" /> 3. करंट अफेयर्स शीट
+                    </label>
+                    {extractSheetId(inputCA) && (
+                      <a
+                        href={`https://docs.google.com/spreadsheets/d/${extractSheetId(inputCA)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] font-bold text-amber-700 hover:underline flex items-center gap-1"
+                      >
+                        शीट खोलें <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="गूगल शीट लिंक (URL) या Sheet ID दर्ज करें..."
+                    value={inputCA}
+                    onChange={(e) => setInputCA(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono shadow-2xs"
+                  />
+                  <span className="text-[10px] text-gray-500 block">
+                    सहेजी गई ID: <code className="font-mono bg-white px-1 py-0.5 rounded border border-gray-200">{spreadsheetIdCA || 'खाली'}</code>
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 pt-1 border-t border-amber-100">
+                  <span className="text-[10px] font-extrabold text-amber-900 block">डेटा पुल एवं इम्पोर्ट विकल्प:</span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handlePullSheet(inputCA, 'currentAffairs', 'preview')}
+                      disabled={sheetSyncing}
+                      className="bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold py-2 rounded-lg text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Search className="h-3 w-3" /> जांचें
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePullSheet(inputCA, 'currentAffairs', 'import_append')}
+                      disabled={sheetSyncing}
+                      className="bg-amber-700 hover:bg-amber-800 text-white font-bold py-2 rounded-lg text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <PlusCircle className="h-3 w-3" /> पुल व जोड़ें
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm("क्या आप वाकई करंट अफेयर्स शीट के डेटा से पुराना करंट अफेयर्स बदलना चाहते हैं?")) {
+                          handlePullSheet(inputCA, 'currentAffairs', 'import_replace');
+                        }
+                      }}
+                      disabled={sheetSyncing}
+                      className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold py-2 rounded-lg text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="h-3 w-3" /> बदलें
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* PREVIEW & PULLED DATA TABLE */}
+            {sheetPreviewData.length > 0 && (
+              <div className="border border-emerald-200 rounded-2xl bg-emerald-50/20 p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-100 pb-3">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-emerald-950 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" /> गूगल शीट से खिंचा गया डेटा ({sheetPreviewData.length} आइटम)
+                    </h3>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      नीचे गूगल शीट से पढ़े गए प्रश्नों / करंट अफेयर्स का पूर्वावलोकन (Preview) देखें:
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetInput = sheetPreviewType === 'pyq' ? inputPyq : sheetPreviewType === 'subject' ? inputSubject : inputCA;
+                        handlePullSheet(targetInput, sheetPreviewType, 'import_append');
+                      }}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <PlusCircle className="h-3.5 w-3.5" /> डेटाबेस में शामिल करें (Append)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSheetPreviewData([])}
+                      className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 text-xs font-bold px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+                    >
+                      बंद करें
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto max-h-80 overflow-y-auto rounded-xl border border-gray-200 bg-white">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-gray-100/80 text-gray-800 border-b border-gray-200 font-extrabold sticky top-0">
+                        <th className="p-3 w-12 text-center">#</th>
+                        {sheetPreviewType === 'currentAffairs' ? (
+                          <>
+                            <th className="p-3">माह / शीर्षक</th>
+                            <th className="p-3">विवरण (Content HI)</th>
+                          </>
+                        ) : (
+                          <>
+                            <th className="p-3">प्रश्न (Hindi)</th>
+                            <th className="p-3">विकल्प (Options)</th>
+                            <th className="p-3">सही उत्तर</th>
+                            <th className="p-3">विषय / परीक्षा</th>
+                          </>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-gray-800">
+                      {sheetPreviewData.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-emerald-50/40 transition">
+                          <td className="p-3 font-mono text-gray-400 text-center font-bold">{idx + 1}</td>
+                          {sheetPreviewType === 'currentAffairs' ? (
+                            <>
+                              <td className="p-3 font-bold text-emerald-900 whitespace-nowrap">
+                                <div>{item.month || item.title}</div>
+                                <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded mt-0.5 inline-block font-normal">
+                                  {item.category || 'General'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-gray-700 max-w-md line-clamp-2">{item.content_hi}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="p-3 font-medium max-w-xs">{item.text_hi}</td>
+                              <td className="p-3 text-[11px] text-gray-600 max-w-xs">
+                                {Array.isArray(item.options_hi) && item.options_hi.map((opt: string, oIdx: number) => (
+                                  <span key={oIdx} className={`inline-block mr-1.5 mb-1 px-1.5 py-0.5 rounded border text-[10px] ${oIdx === item.correctAnswer ? 'bg-emerald-100 border-emerald-300 font-bold text-emerald-900' : 'bg-gray-50 border-gray-200'}`}>
+                                    {String.fromCharCode(65 + oIdx)}: {opt}
+                                  </span>
+                                ))}
+                              </td>
+                              <td className="p-3 font-bold text-emerald-700 whitespace-nowrap">
+                                Option {String.fromCharCode(65 + (item.correctAnswer || 0))}
+                              </td>
+                              <td className="p-3 text-[11px] whitespace-nowrap">
+                                <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded font-bold">
+                                  {item.subject}
+                                </span>
+                                {item.exam && (
+                                  <span className="ml-1 bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded font-bold">
+                                    {item.exam} {item.year ? `(${item.year})` : ''}
+                                  </span>
+                                )}
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Troubleshooting & Guide Section (Collapsible for Clean Look) */}
+            <details className="bg-blue-50/60 hover:bg-blue-50 border border-blue-200/80 rounded-2xl transition group">
+              <summary className="p-4 font-extrabold text-blue-950 text-xs flex items-center justify-between cursor-pointer select-none">
+                <span className="flex items-center gap-2">
+                  <HelpCircle className="h-4.5 w-4.5 text-blue-600" />
+                  गूगल शीट सिंक गाइड एवं ट्रबलशूटिंग सहायता (Sync & Troubleshooting Guide)
+                </span>
+                <span className="text-[11px] text-blue-700 bg-white px-2.5 py-1 rounded-lg border border-blue-200 group-open:hidden font-bold">
+                  गाइड देखें ▼
+                </span>
+                <span className="text-[11px] text-blue-700 bg-white px-2.5 py-1 rounded-lg border border-blue-200 hidden group-open:inline font-bold">
+                  छिपाएं ▲
+                </span>
+              </summary>
+
+              <div className="px-5 pb-5 pt-1 space-y-3 border-t border-blue-100">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">
+                  <div className="bg-white p-3 rounded-xl border border-blue-200/80 space-y-1">
+                    <span className="font-extrabold text-blue-900 text-[11px] flex items-center gap-1">
+                      <span className="bg-blue-600 text-white rounded-full w-4 h-4 inline-flex items-center justify-center text-[10px]">1</span>
+                      शेयर अनुमति (Share Setting):
+                    </span>
+                    <p className="text-gray-600 text-[11px] leading-relaxed">
+                      गूगल शीट में ऊपर कोने में <strong>"Share"</strong> पर क्लिक करें और <strong>"Anyone with the link can view"</strong> चुनें।
+                    </p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-blue-200/80 space-y-1">
+                    <span className="font-extrabold text-blue-900 text-[11px] flex items-center gap-1">
+                      <span className="bg-blue-600 text-white rounded-full w-4 h-4 inline-flex items-center justify-center text-[10px]">2</span>
+                      शीर्ष पंक्ति हेडर (Headers):
+                    </span>
+                    <p className="text-gray-600 text-[11px] leading-relaxed">
+                      पहली पंक्ति में हेडर रखें: <code className="bg-gray-100 px-1 py-0.5 font-mono text-[10px]">Question (HI)</code>, <code className="bg-gray-100 px-1 py-0.5 font-mono text-[10px]">Option A</code>, <code className="bg-gray-100 px-1 py-0.5 font-mono text-[10px]">Option B</code>, <code className="bg-gray-100 px-1 py-0.5 font-mono text-[10px]">Correct Answer</code>, <code className="bg-gray-100 px-1 py-0.5 font-mono text-[10px]">Subject</code>।
+                    </p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-blue-200/80 space-y-1">
+                    <span className="font-extrabold text-blue-900 text-[11px] flex items-center gap-1">
+                      <span className="bg-blue-600 text-white rounded-full w-4 h-4 inline-flex items-center justify-center text-[10px]">3</span>
+                      "पुल व जोड़ें" बटन:
+                    </span>
+                    <p className="text-gray-600 text-[11px] leading-relaxed">
+                      शीट का URL दर्ज करने के बाद कार्ड के नीचे <strong>"जांचें"</strong> या <strong>"पुल व जोड़ें"</strong> बटन दबाएं।
+                    </p>
+                  </div>
+                </div>
+
+                {/* Column Format Pill Checklist */}
+                <div className="pt-2 border-t border-blue-200/60 flex flex-wrap items-center gap-1.5 text-[10px]">
+                  <span className="font-bold text-blue-900 mr-1">स्वीकृत हेडर नाम:</span>
+                  <span className="bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded font-mono font-bold">Question (HI) / प्रश्न</span>
+                  <span className="bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded font-mono font-bold">Option A</span>
+                  <span className="bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded font-mono font-bold">Option B</span>
+                  <span className="bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded font-mono font-bold">Option C</span>
+                  <span className="bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded font-mono font-bold">Option D</span>
+                  <span className="bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded font-mono font-bold">Correct Answer / उत्तर</span>
+                  <span className="bg-blue-100 text-blue-900 px-2 py-0.5 rounded font-mono font-bold">Subject / विषय</span>
+                  <span className="bg-purple-100 text-purple-900 px-2 py-0.5 rounded font-mono font-bold">Exam / परीक्षा</span>
+                  <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-mono font-bold">Month / Title / Content (HI)</span>
+                </div>
+              </div>
+            </details>
+          </div>
+        )}
+
+        {/* EXCEL UPLOAD TAB */}
+        {activeSubTab === 'excel' && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-6">
+            <div className="border-b border-gray-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                  <FileSpreadsheet className="h-5 w-5 text-emerald-600" /> एक्सेल बल्क प्रश्न अपलोड (.xlsx / .xls)
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  अपने कम्प्यूटर से एक्सेल शीट अपलोड करके एक साथ सैकड़ों प्रश्न जोड़ें।
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDownloadExcelTemplate}
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-2 shrink-0 cursor-pointer"
+              >
+                <Download className="h-4 w-4" /> नमूना (Template) एक्सेल डाउनलोड करें
+              </button>
+            </div>
+
+            {/* Banners */}
+            {uploadSuccessMsg && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0" />
+                {uploadSuccessMsg}
+              </div>
+            )}
+            {uploadErrorMsg && (
+              <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {uploadErrorMsg}
+              </div>
+            )}
+
+            {/* Upload Area */}
+            <div className="border-2 border-dashed border-gray-300 hover:border-emerald-500 rounded-2xl p-8 text-center bg-gray-50/50 hover:bg-emerald-50/20 transition cursor-pointer relative">
+              <input
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                onChange={handleFileUpload}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              <div className="space-y-3 pointer-events-none">
+                <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto">
+                  <UploadCloud className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-extrabold text-gray-800">
+                    यहाँ क्लिक करें या अपनी एक्सेल फाइल (.xlsx / .xls) ड्रॉप करें
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Excel/CSV फाइलें समर्थित हैं।
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Parsed Preview Table */}
+            {parsedExcelQuestions.length > 0 && (
+              <div className="space-y-4 pt-2 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider">
+                    अपलोड हेतु तैयार प्रश्न ({parsedExcelQuestions.length})
                   </h3>
                 </div>
-                <p className="text-[11px] leading-relaxed text-gray-500 max-w-2xl">
-                  {token 
-                    ? "आपका सुरक्षा सत्र सक्रिय है। आप गूगल शीट बना सकते हैं और प्रश्नों को सीधा पुल (Pull) और पुश (Push) कर सकते हैं।" 
-                    : "सुरक्षा कारणों से पृष्ठ रीफ्रेश होने पर गूगल सत्र डिस्कनेक्ट हो जाता है। शीट से सीधे प्रश्न सिंक करने (डेटा लोड करने) के लिए कृपया गूगल ड्राइव ऑथराइज़ करें।"
-                  }
-                </p>
-              </div>
-              <button
-                onClick={handleLogin}
-                className={`px-4 py-2.5 rounded-xl font-bold text-[11px] flex items-center gap-1.5 transition shrink-0 shadow-sm cursor-pointer ${token ? 'bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-50' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${sheetSyncing ? 'animate-spin' : ''}`} />
-                {token ? "सत्र री-ऑथराइज़ करें" : "गूगल ड्राइव ऑथराइज़ करें (Authorize)"}
-              </button>
-            </div>
 
-            {sheetSuccess && (
-              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-emerald-800 text-xs flex items-start gap-2.5">
-                <Check className="h-4.5 w-4.5 text-emerald-600 shrink-0 mt-0.5 animate-bounce" />
-                <div>
-                  <h4 className="font-bold">सफलता! (Success)</h4>
-                  <p>{sheetSuccess}</p>
+                <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-xl text-xs">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-100 text-gray-700 font-bold sticky top-0">
+                      <tr>
+                        <th className="p-2.5 border-b">#</th>
+                        <th className="p-2.5 border-b">प्रश्न (Hindi)</th>
+                        <th className="p-2.5 border-b">विषय</th>
+                        <th className="p-2.5 border-b">उत्तर</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 font-medium">
+                      {parsedExcelQuestions.slice(0, 10).map((pq, pIdx) => (
+                        <tr key={pIdx} className="hover:bg-gray-50">
+                          <td className="p-2.5 text-gray-400 font-bold">{pIdx + 1}</td>
+                          <td className="p-2.5 text-gray-800 max-w-xs truncate">{pq.text_hi}</td>
+                          <td className="p-2.5 text-emerald-700 font-bold">{pq.subject}</td>
+                          <td className="p-2.5 font-bold text-gray-900">
+                            {['A', 'B', 'C', 'D'][pq.correctAnswer] || pq.correctAnswer}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {parsedExcelQuestions.length > 10 && (
+                    <div className="p-2 bg-gray-50 text-center text-[11px] text-gray-500 border-t font-medium">
+                      और {parsedExcelQuestions.length - 10} अन्य प्रश्न...
+                    </div>
+                  )}
+                </div>
+
+                {/* Bulk Save Actions */}
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSaveBulkQuestions('append')}
+                    disabled={uploadLoading}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-3 rounded-xl text-xs transition flex items-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    {uploadLoading ? "सहेजा जा रहा है..." : "मौजूदा प्रश्नों में जोड़ें (Append)"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("चेतावनी: इससे पहले से मौजूद सभी प्रश्न हट जाएंगे। क्या आप आगे बढ़ना चाहते हैं?")) {
+                        handleSaveBulkQuestions('replace');
+                      }
+                    }}
+                    disabled={uploadLoading}
+                    className="bg-red-600 hover:bg-red-700 text-white font-extrabold px-6 py-3 rounded-xl text-xs transition flex items-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {uploadLoading ? "सहेजा जा रहा है..." : "सभी पुराने प्रश्न बदलकर नए रखें (Replace All)"}
+                  </button>
                 </div>
               </div>
             )}
-
-            {sheetError && (
-              <div className="bg-red-50 border border-red-200 p-4 rounded-xl text-red-800 text-xs flex items-start gap-2.5">
-                <AlertCircle className="h-4.5 w-4.5 text-red-500 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-bold">सिंक त्रुटि (Sync Error)</h4>
-                  <p>{sheetError}</p>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              
-              {/* SECTION 1: PYQ PRACTICE */}
-              <div className="border border-gray-100 rounded-2xl p-6 bg-gradient-to-br from-amber-50/10 to-amber-100/5 flex flex-col justify-between space-y-4 shadow-sm">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">SECTION 1</span>
-                    {spreadsheetIdPyq ? (
-                      <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">सक्रिय (CONNECTED)</span>
-                    ) : (
-                      <span className="text-[9px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold">डिस्कनेक्टेड</span>
-                    )}
-                  </div>
-                  <h3 className="text-sm font-extrabold text-gray-800 mt-2">पीवायक्यू प्रैक्टिस (PYQ Practice)</h3>
-                  <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-                    यह शीट विगत वर्षों की परीक्षाओं (PYQ) के प्रश्न सिंक करने हेतु है।
-                  </p>
-
-                  {spreadsheetIdPyq ? (
-                    <div className="mt-4 space-y-3">
-                      <div>
-                        <span className="text-[10px] text-gray-400 font-bold">कनेक्टेड शीट आईडी:</span>
-                        <code className="text-[10px] text-emerald-800 bg-emerald-50 px-2 py-1 rounded font-mono block max-w-full overflow-x-auto select-all mt-1">
-                          {spreadsheetIdPyq}
-                        </code>
-                      </div>
-                      <div className="flex gap-2">
-                        <a
-                          href={`https://docs.google.com/spreadsheets/d/${spreadsheetIdPyq}/edit`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 py-2 text-center bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-[10px] font-bold rounded-lg transition flex items-center justify-center gap-1 shadow-sm"
-                        >
-                          शीट खोलें <ExternalLink className="h-3 w-3 text-gray-400" />
-                        </a>
-                        <button
-                          onClick={() => disconnectSheet('pyq')}
-                          className="px-2.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-bold rounded-lg transition"
-                          title="डिस्कनेक्ट करें"
-                        >
-                          डिस्कनेक्ट
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-4 space-y-3">
-                      <button
-                        onClick={() => createNewSheet('pyq')}
-                        disabled={sheetSyncing}
-                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1 shadow shadow-emerald-600/10 cursor-pointer"
-                      >
-                        <PlusCircle className="h-3.5 w-3.5" /> नई शीट बनाकर कनेक्ट करें
-                      </button>
-                      <div className="relative flex py-1 items-center">
-                        <div className="flex-grow border-t border-gray-100"></div>
-                        <span className="flex-shrink mx-2 text-[10px] text-gray-300 font-bold">या</span>
-                        <div className="flex-grow border-t border-gray-100"></div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <input
-                          type="text"
-                          placeholder="मौजूदा शीट आईडी दर्ज करें"
-                          value={inputPyq}
-                          onChange={(e) => setInputPyq(e.target.value)}
-                          className="w-full p-2 text-[11px] border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        />
-                        <button
-                          onClick={() => connectExistingSheet('pyq')}
-                          disabled={sheetSyncing || !inputPyq.trim()}
-                          className="w-full py-2 bg-gray-800 hover:bg-gray-900 text-white font-bold rounded-lg text-[10px] transition cursor-pointer"
-                        >
-                          कनेक्ट करें
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {spreadsheetIdPyq && (
-                  <div className="pt-3 border-t border-gray-100 space-y-2">
-                    <button
-                      onClick={() => handlePull('pyq')}
-                      disabled={sheetSyncing}
-                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <RefreshCw className={`h-3 w-3 ${sheetSyncing ? 'animate-spin' : ''}`} /> शीट से डेटा लोड करें (Pull)
-                    </button>
-                    <button
-                      onClick={() => handlePush('pyq')}
-                      disabled={sheetSyncing}
-                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <Save className="h-3 w-3" /> शीट पर डेटा पुश करें (Push)
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* SECTION 2: SUBJECT TEST */}
-              <div className="border border-gray-100 rounded-2xl p-6 bg-gradient-to-br from-emerald-50/10 to-emerald-100/5 flex flex-col justify-between space-y-4 shadow-sm">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">SECTION 2</span>
-                    {spreadsheetIdSubject ? (
-                      <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">सक्रिय (CONNECTED)</span>
-                    ) : (
-                      <span className="text-[9px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold">डिस्कनेक्टेड</span>
-                    )}
-                  </div>
-                  <h3 className="text-sm font-extrabold text-gray-800 mt-2">विषय टेस्ट (Subject Test)</h3>
-                  <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-                    यह शीट अध्यायवार/विषयवार टेस्ट के प्रश्नों के लिए उपयोग की जाती है।
-                  </p>
-
-                  {spreadsheetIdSubject ? (
-                    <div className="mt-4 space-y-3">
-                      <div>
-                        <span className="text-[10px] text-gray-400 font-bold">कनेक्टेड शीट आईडी:</span>
-                        <code className="text-[10px] text-emerald-800 bg-emerald-50 px-2 py-1 rounded font-mono block max-w-full overflow-x-auto select-all mt-1">
-                          {spreadsheetIdSubject}
-                        </code>
-                      </div>
-                      <div className="flex gap-2">
-                        <a
-                          href={`https://docs.google.com/spreadsheets/d/${spreadsheetIdSubject}/edit`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 py-2 text-center bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-[10px] font-bold rounded-lg transition flex items-center justify-center gap-1 shadow-sm"
-                        >
-                          शीट खोलें <ExternalLink className="h-3 w-3 text-gray-400" />
-                        </a>
-                        <button
-                          onClick={() => disconnectSheet('subject')}
-                          className="px-2.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-bold rounded-lg transition"
-                          title="डिस्कनेक्ट करें"
-                        >
-                          डिस्कनेक्ट
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-4 space-y-3">
-                      <button
-                        onClick={() => createNewSheet('subject')}
-                        disabled={sheetSyncing}
-                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1 shadow shadow-emerald-600/10 cursor-pointer"
-                      >
-                        <PlusCircle className="h-3.5 w-3.5" /> नई शीट बनाकर कनेक्ट करें
-                      </button>
-                      <div className="relative flex py-1 items-center">
-                        <div className="flex-grow border-t border-gray-100"></div>
-                        <span className="flex-shrink mx-2 text-[10px] text-gray-300 font-bold">या</span>
-                        <div className="flex-grow border-t border-gray-100"></div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <input
-                          type="text"
-                          placeholder="मौजूदा शीट आईडी दर्ज करें"
-                          value={inputSubject}
-                          onChange={(e) => setInputSubject(e.target.value)}
-                          className="w-full p-2 text-[11px] border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        />
-                        <button
-                          onClick={() => connectExistingSheet('subject')}
-                          disabled={sheetSyncing || !inputSubject.trim()}
-                          className="w-full py-2 bg-gray-800 hover:bg-gray-900 text-white font-bold rounded-lg text-[10px] transition cursor-pointer"
-                        >
-                          कनेक्ट करें
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {spreadsheetIdSubject && (
-                  <div className="pt-3 border-t border-gray-100 space-y-2">
-                    <button
-                      onClick={() => handlePull('subject')}
-                      disabled={sheetSyncing}
-                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <RefreshCw className={`h-3 w-3 ${sheetSyncing ? 'animate-spin' : ''}`} /> शीट से डेटा लोड करें (Pull)
-                    </button>
-                    <button
-                      onClick={() => handlePush('subject')}
-                      disabled={sheetSyncing}
-                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <Save className="h-3 w-3" /> शीट पर डेटा पुश करें (Push)
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* SECTION 3: CURRENT AFFAIRS */}
-              <div className="border border-gray-100 rounded-2xl p-6 bg-gradient-to-br from-blue-50/10 to-blue-100/5 flex flex-col justify-between space-y-4 shadow-sm">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">SECTION 3</span>
-                    {spreadsheetIdCA ? (
-                      <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">सक्रिय (CONNECTED)</span>
-                    ) : (
-                      <span className="text-[9px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold">डिस्कनेक्टेड</span>
-                    )}
-                  </div>
-                  <h3 className="text-sm font-extrabold text-gray-800 mt-2">करंत अफेयर्स (Current Affairs)</h3>
-                  <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-                    यह शीट मासिक करंट अफेयर्स के टॉपिक्स और सामग्री को सिंक करने के लिए है।
-                  </p>
-
-                  {spreadsheetIdCA ? (
-                    <div className="mt-4 space-y-3">
-                      <div>
-                        <span className="text-[10px] text-gray-400 font-bold">कनेक्टेड शीट आईडी:</span>
-                        <code className="text-[10px] text-emerald-800 bg-emerald-50 px-2 py-1 rounded font-mono block max-w-full overflow-x-auto select-all mt-1">
-                          {spreadsheetIdCA}
-                        </code>
-                      </div>
-                      <div className="flex gap-2">
-                        <a
-                          href={`https://docs.google.com/spreadsheets/d/${spreadsheetIdCA}/edit`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 py-2 text-center bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-[10px] font-bold rounded-lg transition flex items-center justify-center gap-1 shadow-sm"
-                        >
-                          शीट खोलें <ExternalLink className="h-3 w-3 text-gray-400" />
-                        </a>
-                        <button
-                          onClick={() => disconnectSheet('ca')}
-                          className="px-2.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-bold rounded-lg transition"
-                          title="डिस्कनेक्ट करें"
-                        >
-                          डिस्कनेक्ट
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-4 space-y-3">
-                      <button
-                        onClick={() => createNewSheet('ca')}
-                        disabled={sheetSyncing}
-                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1 shadow shadow-emerald-600/10 cursor-pointer"
-                      >
-                        <PlusCircle className="h-3.5 w-3.5" /> नई शीट बनाकर कनेक्ट करें
-                      </button>
-                      <div className="relative flex py-1 items-center">
-                        <div className="flex-grow border-t border-gray-100"></div>
-                        <span className="flex-shrink mx-2 text-[10px] text-gray-300 font-bold">या</span>
-                        <div className="flex-grow border-t border-gray-100"></div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <input
-                          type="text"
-                          placeholder="मौजूदा शीट आईडी दर्ज करें"
-                          value={inputCA}
-                          onChange={(e) => setInputCA(e.target.value)}
-                          className="w-full p-2 text-[11px] border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        />
-                        <button
-                          onClick={() => connectExistingSheet('ca')}
-                          disabled={sheetSyncing || !inputCA.trim()}
-                          className="w-full py-2 bg-gray-800 hover:bg-gray-900 text-white font-bold rounded-lg text-[10px] transition cursor-pointer"
-                        >
-                          कनेक्ट करें
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {spreadsheetIdCA && (
-                  <div className="pt-3 border-t border-gray-100 space-y-2">
-                    <button
-                      onClick={() => handlePull('ca')}
-                      disabled={sheetSyncing}
-                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <RefreshCw className={`h-3 w-3 ${sheetSyncing ? 'animate-spin' : ''}`} /> शीट से डेटा लोड करें (Pull)
-                    </button>
-                    <button
-                      onClick={() => handlePush('ca')}
-                      disabled={sheetSyncing}
-                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <Save className="h-3 w-3" /> शीट पर डेटा पुश करें (Push)
-                    </button>
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-            <div className="p-5 bg-gray-50 border border-gray-100 rounded-2xl space-y-2.5 text-xs leading-relaxed text-gray-500 font-sans">
-              <p className="font-bold text-gray-700">💡 यह कैसे कार्य करता है? (How it works?)</p>
-              <ul className="list-disc pl-5 space-y-1">
-                <li>प्रश्नों और करंट अफेयर्स के डेटाबेस को अलग-अलग रखने से सिंक प्रक्रिया तेज़ और व्यवस्थित होती है।</li>
-                <li>जब आप <strong>"डेटा लोड करें (Pull)"</strong> करते हैं, तो सर्वर डेटाबेस का वह विशिष्ट भाग शीट के रिकॉर्ड्स से अपडेट हो जाता है।</li>
-                <li>जब आप <strong>"डेटा पुश करें (Push)"</strong> करते हैं, तो सर्वर का वर्तमान लाइव डेटा शीट पर री-राइट हो जाता है।</li>
-              </ul>
-            </div>
           </div>
         )}
 
-        {activeSubTab === 'excel' && (
-          /* EXCEL UPLOAD SECTION */
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 sm:p-8 space-y-6">
-            <div className="flex justify-between items-start border-b border-gray-100 pb-4 flex-wrap gap-4">
-              <div>
-                <h2 className="text-lg font-bold text-gray-800">Bulk Question Importer</h2>
-                <p className="text-xs text-gray-400 mt-1">
-                  Upload an Excel spreadsheet (.xlsx, .xls) or comma-separated CSV matching our columns template to add hundreds of questions instantly.
-                </p>
-              </div>
-
-              <button
-                onClick={handleDownloadTemplate}
-                className="px-4 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-              >
-                <Download className="h-4 w-4" /> Download Excel Template
-              </button>
-            </div>
-
-            {/* Error & Success Messages */}
-            {uploadSuccessMsg && (
-              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-emerald-800 text-xs flex items-start gap-2.5">
-                <Check className="h-4.5 w-4.5 text-emerald-600 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-bold">Import Completed Successfully!</h4>
-                  <p>{uploadSuccessMsg}</p>
-                </div>
-              </div>
-            )}
-
-            {uploadErrorMsg && (
-              <div className="bg-red-50 border border-red-200 p-4 rounded-xl text-red-800 text-xs flex items-start gap-2.5">
-                <AlertCircle className="h-4.5 w-4.5 text-red-500 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-bold">Parsing / Validation Failed</h4>
-                  <p className="leading-relaxed whitespace-pre-wrap">{uploadErrorMsg}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Drag & Drop File Upload Input */}
-            <div className="border-2 border-dashed border-gray-200 rounded-2xl hover:border-amber-400 transition cursor-pointer p-8 text-center bg-gray-50/20">
-              <input 
-                type="file" 
-                accept=".xlsx, .xls, .csv" 
-                onChange={handleFileUpload}
-                className="hidden" 
-                id="excel-file-picker" 
-              />
-              <label htmlFor="excel-file-picker" className="cursor-pointer block space-y-4">
-                <div className="p-4 bg-amber-50 text-amber-700 rounded-full w-14 h-14 mx-auto flex items-center justify-center">
-                  <FileSpreadsheet className="h-6 w-6" />
-                </div>
-                <div>
-                  <p className="text-xs sm:text-sm font-bold text-gray-800">
-                    {uploadLoading ? 'Processing file... please wait' : 'Choose File or Drag it here'}
-                  </p>
-                  <p className="text-[10px] text-gray-400 mt-1 font-mono">Supports Microsoft Excel (.xlsx, .xls) & standard UTF-8 CSV</p>
-                </div>
-              </label>
-            </div>
-
-            {/* Format Instructions Checklist */}
-            <div className="bg-amber-50/20 border border-amber-100 rounded-xl p-5 space-y-3">
-              <h4 className="text-xs font-bold text-amber-900 flex items-center gap-1.5 uppercase tracking-wider">
-                <AlertCircle className="h-4.5 w-4.5" /> Spreadsheet Schema Blueprint
-              </h4>
-              <p className="text-xs text-gray-500 leading-relaxed font-sans">
-                To guarantee zero import collision or indexing failures, your uploaded table must strictly match these exact column headers:
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 text-[10px] font-semibold text-gray-600 font-sans">
-                <div className="flex items-center gap-1 bg-white p-2 rounded-lg border border-gray-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                  <span>text_hi (Hindi Statement)*</span>
-                </div>
-                <div className="flex items-center gap-1 bg-white p-2 rounded-lg border border-gray-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                  <span>option_hi_1 to option_hi_5*</span>
-                </div>
-                <div className="flex items-center gap-1 bg-white p-2 rounded-lg border border-gray-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                  <span>correctAnswer (0 to 4)*</span>
-                </div>
-                <div className="flex items-center gap-1 bg-white p-2 rounded-lg border border-gray-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                  <span>subject / topic / exam / year</span>
-                </div>
-                <div className="flex items-center gap-1 bg-white p-2 rounded-lg border border-gray-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                  <span>explanation_hi (Explanation)</span>
-                </div>
-              </div>
-              <p className="text-[10px] text-gray-400 italic">Fields marked with (*) are strictly required. Missing values will trigger parsing rejection.</p>
-            </div>
-          </div>
-        )}
-
+        {/* MANUAL QUESTION ADD TAB */}
         {activeSubTab === 'manual' && (
-          /* MANUAL ENTRY FORM SECTION */
-          <form onSubmit={handleSubmitManual} className="bg-white rounded-2xl border border-gray-100 p-6 sm:p-8 space-y-6">
-            <div className="border-b border-gray-100 pb-4">
-              <h2 className="text-lg font-bold text-gray-800">Add Question Manually</h2>
-              <p className="text-xs text-gray-400 mt-1">
-                Manually key-in single bilingual MCQ practice items directly into the live quiz database.
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-6">
+            <div className="border-b border-gray-100 pb-3">
+              <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                <PlusCircle className="h-5 w-5 text-emerald-600" /> नया प्रश्न manualmente जोड़ें (Add Manual Question)
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                निचले फॉर्म के माध्यम से एक-एक करके नए प्रश्न एवं उनकी व्याख्या जोड़ें।
               </p>
             </div>
 
             {manualSuccess && (
-              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
-                <Check className="h-5 w-5 text-emerald-600 shrink-0" />
-                <span>Question saved and live successfully! You can add another below.</span>
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0" />
+                प्रश्न सफलतापूर्वक डेटाबेस में जोड़ दिया गया!
               </div>
             )}
 
-            {/* Question Hindi textarea */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-700 block">Question (Hindi)*</label>
-              <textarea
-                required
-                value={textHi}
-                onChange={(e) => setTextHi(e.target.value)}
-                placeholder="उदा. छत्तीसगढ़ की सबसे ऊंची चोटी कौन सी है?"
-                rows={4}
-                className="w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs sm:text-sm leading-relaxed"
-              />
-            </div>
+            <form onSubmit={handleSubmitManual} className="space-y-5 bg-gray-50/60 p-6 rounded-2xl border border-gray-200">
+              {/* Subject, Topic, Exam, Year Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">विषय (Subject)*</label>
+                  <select
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  >
+                    {subjectsPreset.map((sub, idx) => (
+                      <option key={idx} value={sub}>{sub}</option>
+                    ))}
+                  </select>
+                </div>
 
-            {/* Options configuration */}
-            <div className="space-y-3.5">
-              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Answer Choice Options</h3>
-              <p className="text-[11px] text-gray-400 leading-none">Provide 4 options (Option A, B, C, D) for the question.</p>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">टॉपिक / अध्याय (Topic)*</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="उदा. भौतिक भूगोल, पंचायती राज"
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                {optionsHi.map((_, idx) => (
-                  <div key={idx} className="flex items-center gap-2 bg-gray-50/40 p-3 rounded-xl border border-gray-100">
-                    <span className="font-sans text-xs font-bold bg-amber-100 text-amber-800 w-6 h-6 rounded-lg flex items-center justify-center shrink-0">
-                      {String.fromCharCode(65 + idx)}
-                    </span>
-                    <input
-                      type="text"
-                      placeholder={`Option ${String.fromCharCode(65 + idx)} (Hindi)`}
-                      value={optionsHi[idx]}
-                      onChange={(e) => handleOptionHiChange(idx, e.target.value)}
-                      className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                  </div>
-                ))}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">परीक्षा का नाम (Exam Name)</label>
+                  <input
+                    type="text"
+                    placeholder="उदा. CGPSC Prelims"
+                    value={exam}
+                    onChange={(e) => setExam(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">वर्ष (Year)</label>
+                  <input
+                    type="number"
+                    value={year}
+                    onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* Metadata (Subject, Correct Index, Exam etc) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 pt-2">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-700 block">Correct Choice*</label>
-                <select
-                  value={correctAnswer}
-                  onChange={(e) => setCorrectAnswer(Number(e.target.value))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl focus:outline-none text-xs bg-white font-sans font-bold"
-                >
-                  {optionsHi.map((_, idx) => (
-                    <option key={idx} value={idx}>Option {String.fromCharCode(65 + idx)}</option>
+              {/* Question Text */}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">प्रश्न सामग्री (Hindi)*</label>
+                  <textarea
+                    rows={3}
+                    required
+                    placeholder="यहाँ प्रश्न का पूरा पाठ हिन्दी में दर्ज करें..."
+                    value={textHi}
+                    onChange={(e) => setTextHi(e.target.value)}
+                    className="w-full p-3 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium leading-relaxed"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-500 block">Question Text (English - optional)</label>
+                  <input
+                    type="text"
+                    placeholder="Optional English translation..."
+                    value={textEn}
+                    onChange={(e) => setTextEn(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="space-y-2 pt-2 border-t border-gray-200">
+                <label className="text-xs font-black text-gray-800 block">विकल्प (Options) एवं सही उत्तर चुनें*</label>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {['A', 'B', 'C', 'D'].map((label, optIdx) => (
+                    <div key={optIdx} className="bg-white p-3 rounded-xl border border-gray-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold text-emerald-800">विकल्प {label}</span>
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-700">
+                          <input
+                            type="radio"
+                            name="correctOpt"
+                            checked={correctAnswer === optIdx}
+                            onChange={() => setCorrectAnswer(optIdx)}
+                            className="text-emerald-600 focus:ring-emerald-500"
+                          />
+                          सही उत्तर (Correct)
+                        </label>
+                      </div>
+
+                      <input
+                        type="text"
+                        required
+                        placeholder={`विकल्प ${label} (Hindi)`}
+                        value={optionsHi[optIdx] || ''}
+                        onChange={(e) => {
+                          const newOpts = [...optionsHi];
+                          newOpts[optIdx] = e.target.value;
+                          setOptionsHi(newOpts);
+                        }}
+                        className="w-full p-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      />
+                    </div>
                   ))}
-                </select>
+                </div>
               </div>
 
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-xs font-bold text-gray-700 block">Subject Classification*</label>
-                <select
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl focus:outline-none text-xs bg-white font-sans font-semibold"
-                >
-                  {subjectsPreset.map(sub => (
-                    <option key={sub} value={sub}>{sub}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-700 block">Topic / Chapter*</label>
-                <input
-                  required
-                  type="text"
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder="e.g., Geographics, Rivers, Tribes"
-                  className="w-full p-2.5 border border-gray-200 rounded-xl focus:outline-none text-xs"
+              {/* Explanation */}
+              <div className="space-y-1 pt-2 border-t border-gray-200">
+                <label className="text-[11px] font-bold text-gray-700 block">व्याख्या / स्पष्टीकरण (Hindi Explanation)</label>
+                <textarea
+                  rows={3}
+                  placeholder="प्रश्न का सही उत्तर क्यों है, इसकी विस्तृत व्याख्या यहाँ लिखें..."
+                  value={explanationHi}
+                  onChange={(e) => setExplanationHi(e.target.value)}
+                  className="w-full p-3 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium leading-relaxed"
                 />
               </div>
 
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-gray-700">Exam</label>
-                    <input
-                      type="text"
-                      value={exam}
-                      onChange={(e) => setExam(e.target.value)}
-                      placeholder="CGPSC Pre"
-                      className="w-full p-2.5 border border-gray-200 rounded-xl focus:outline-none text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-gray-700">Year</label>
-                    <input
-                      type="number"
-                      value={year}
-                      onChange={(e) => setYear(Number(e.target.value))}
-                      className="w-full p-2.5 border border-gray-200 rounded-xl focus:outline-none text-xs font-sans"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Explanation Row */}
-            <div className="space-y-2 pt-2">
-              <label className="text-xs font-bold text-gray-700 block">Detailed Explanation (Hindi)</label>
-              <textarea
-                value={explanationHi}
-                onChange={(e) => setExplanationHi(e.target.value)}
-                placeholder="उदा. वीर नारायण सिंह सोनाखान के जमींदार थे और छत्तीसगढ़ के पहले शहीद हैं..."
-                rows={3}
-                className="w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs leading-relaxed font-sans"
-              />
-            </div>
-
-            {/* Buttons */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={submittingManual}
-                className="px-6 py-2.5 bg-amber-600 text-white hover:bg-amber-700 rounded-xl text-xs font-bold shadow transition flex items-center gap-1 cursor-pointer"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-3 rounded-xl text-xs transition flex items-center gap-2 shadow-sm cursor-pointer"
               >
-                {submittingManual ? 'Saving...' : 'Add Question'}
+                <Save className="h-4 w-4" />
+                {submittingManual ? "सहेजा जा रहा है..." : "प्रश्न सहेजें (Save Question)"}
               </button>
-            </div>
-          </form>
+            </form>
+          </div>
         )}
 
+        {/* QUESTIONS LIST TAB */}
         {activeSubTab === 'list' && (
-          /* QUESTION LIST VIEWER SECTION */
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
-            
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 border-b border-gray-100 pb-4">
-              <h2 className="text-base font-bold text-gray-800">All Questions in Database ({filteredQuestions.length})</h2>
-              
-              {/* Search Questions */}
-              <div className="relative w-full sm:w-64">
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-3 border-b border-gray-100">
+              <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                <Search className="h-5 w-5 text-emerald-600" /> प्रश्न सूची प्रबंधक
+              </h2>
+              <div className="relative w-full sm:w-72">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search by question, subject, or topic..."
+                  placeholder="प्रश्न, विषय या परीक्षा खोजें..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 pr-4 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 w-full"
+                  className="pl-9 pr-4 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full font-medium"
                 />
               </div>
             </div>
 
-            {/* List Table Grid layout */}
             <div className="space-y-3">
-              {filteredQuestions.map((q, qIdx) => {
+              {filteredQuestions.map((q) => {
                 const isExpanded = expandedQuestion === q.id;
                 return (
-                  <div key={q.id} className="border border-gray-100 rounded-xl overflow-hidden bg-white hover:border-amber-200 transition">
-                    
-                    {/* Compact Item Header */}
-                    <div 
-                      className="p-4 flex items-start justify-between gap-4 cursor-pointer select-none"
-                    >
-                      <div className="space-y-1 flex-1" onClick={() => setExpandedQuestion(isExpanded ? null : q.id)}>
-                        <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-bold">
-                          <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded">
+                  <div key={q.id} className="border border-gray-200 rounded-xl p-4 bg-white hover:border-emerald-300 transition space-y-2">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1 flex-1 cursor-pointer" onClick={() => setExpandedQuestion(isExpanded ? null : q.id)}>
+                        <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
+                          <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded">
                             {q.subject}
                           </span>
                           <span className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded">
@@ -1764,142 +1741,332 @@ export default function AdminPanel({ questions, onRefreshQuestions }: AdminPanel
                             </span>
                           )}
                         </div>
-                        <h4 className="text-xs sm:text-sm font-semibold text-gray-800 line-clamp-1 leading-relaxed mt-1 font-sans">
+                        <h4 className="text-xs sm:text-sm font-semibold text-gray-800 leading-relaxed mt-1 font-sans">
                           {q.text_hi}
                         </h4>
                       </div>
 
-                      <div className="flex items-center gap-2.5">
-                        <button
-                          onClick={() => handleDeleteQuestion(q.id)}
-                          className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-lg transition shrink-0 cursor-pointer"
-                          title="हटाएं (Delete)"
-                        >
-                          <Trash className="h-4 w-4" />
-                        </button>
-                        <div className="text-gray-400 shrink-0" onClick={() => setExpandedQuestion(isExpanded ? null : q.id)}>
-                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                        </div>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteQuestion(q.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition cursor-pointer"
+                        title="हटाएं"
+                      >
+                        <Trash className="h-4 w-4" />
+                      </button>
                     </div>
 
-                    {/* Detailed expandable card info */}
                     {isExpanded && (
-                      <div className="px-4 pb-4 pt-1 border-t border-gray-100 bg-gray-50/20 space-y-4 text-xs">
-                        {q.text_en && (
-                          <div className="p-3 bg-white rounded-lg border border-gray-100 italic text-gray-500 font-sans">
-                            {q.text_en}
-                          </div>
-                        )}
-
-                        {/* Rendering Options list */}
-                        <div className="space-y-2">
-                          <p className="font-bold text-gray-600 uppercase tracking-wider text-[10px]">Options:</p>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {q.options_hi.slice(0, 4).map((optHi, optIdx) => {
-                              const optEn = q.options_en?.[optIdx];
-                              const isCorrect = optIdx === q.correctAnswer;
-                              return (
-                                <div 
-                                  key={optIdx}
-                                  className={`p-2 rounded-lg border text-[11px] flex items-center justify-between ${
-                                    isCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-bold' : 'bg-white border-gray-100 text-gray-700'
-                                  }`}
-                                >
-                                  <span className="font-sans">{String.fromCharCode(65 + optIdx)}. {optHi} {optEn ? `(${optEn})` : ''}</span>
-                                  {isCorrect && <Check className="h-4.5 w-4.5 text-emerald-600" />}
-                                </div>
-                              );
-                            })}
-                          </div>
+                      <div className="pt-3 border-t border-gray-100 text-xs space-y-2 bg-gray-50/50 p-3 rounded-xl mt-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {q.options_hi.map((opt, oIdx) => (
+                            <div key={oIdx} className={`p-2 rounded-lg border text-xs ${oIdx === q.correctAnswer ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-gray-200 text-gray-700'}`}>
+                              {String.fromCharCode(65 + oIdx)}. {opt} {oIdx === q.correctAnswer && '✓'}
+                            </div>
+                          ))}
                         </div>
-
-                        {/* Solution card */}
                         {q.explanation_hi && (
-                          <div className="p-3.5 bg-amber-50/20 border border-amber-100 rounded-lg">
-                            <p className="font-bold text-amber-900 mb-1">Explanation / Solution:</p>
-                            <p className="text-gray-600 leading-relaxed font-sans">{q.explanation_hi}</p>
+                          <div className="text-xs text-gray-600 pt-1">
+                            <strong>व्याख्या:</strong> {q.explanation_hi}
                           </div>
                         )}
                       </div>
                     )}
-
                   </div>
                 );
               })}
 
               {filteredQuestions.length === 0 && (
-                <p className="text-center py-8 text-gray-400 text-xs">No questions found matching your search term.</p>
+                <p className="text-center text-xs text-gray-400 py-8">कोई प्रश्न नहीं मिला।</p>
               )}
             </div>
-
           </div>
         )}
 
-        {/* CURRENT AFFAIRS MANAGER SUBTAB */}
+        {/* CURRENT AFFAIRS TAB */}
         {activeSubTab === 'currentAffairs' && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 sm:p-8 space-y-8 animate-in fade-in duration-200">
-            <div className="border-b border-gray-100 pb-4">
-              <h2 className="text-lg font-bold text-gray-800">करंट अफेयर्स प्रबंधन (Current Affairs Manager)</h2>
-              <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-                यहाँ से आप मासिक समसामयिकी (Monthly Current Affairs) आर्टिकल्स जोड़, संशोधित या हटा सकते हैं। ये सीधे यूज़र के करंट अफेयर्स सेक्शन में दिखेंगे।
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-6">
+            <div className="border-b border-gray-100 pb-3">
+              <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                <Newspaper className="h-5 w-5 text-emerald-600" /> करंट अफेयर्स प्रबंधक
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                यहाँ से आप मासिक या दैनिक करंट अफेयर्स जोड़ व सम्पादित कर सकते हैं।
               </p>
             </div>
 
-            {caSuccessMsg && (
-              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
-                <Check className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
-                <p className="font-bold">{caSuccessMsg}</p>
-              </div>
-            )}
-
-            {/* Current Affairs Submission Form */}
-            <form onSubmit={handleSubmitCurrentAffairs} className="space-y-4 bg-gray-50/55 p-5 rounded-2xl border border-gray-100">
-              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">
-                {caEditingId ? "करंट अफेयर्स संपादित करें (Edit Article)" : "नया करंट अफेयर्स जोड़ें (Add New Article)"}
-              </h3>
-              
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wide block">माह (Month)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g., July 2026"
-                  value={caMonth}
-                  onChange={(e) => setCaMonth(e.target.value)}
-                  className="max-w-md w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-gray-800 font-bold"
-                />
+            <form onSubmit={handleSubmitCurrentAffairs} className="space-y-4 bg-gray-50 p-5 rounded-2xl border border-gray-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">माह / तिथि (Month/Date)*</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="उदा. July 2026"
+                    value={caMonth}
+                    onChange={(e) => setCaMonth(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wide block">विवरण - हिंदी में (Content - Hindi) *</label>
+                <label className="text-[11px] font-bold text-gray-700 block">करंट अफेयर्स सामग्री (Hindi)*</label>
                 <textarea
-                  required
                   rows={6}
-                  placeholder="करंट अफेयर्स का विस्तृत विवरण हिंदी में दर्ज करें..."
+                  required
+                  placeholder="यहाँ करंट अफेयर्स का पूरा विवरण (बुलेट पॉइंट्स या पैराग्राफ) लिखें..."
                   value={caContentHi}
                   onChange={(e) => setCaContentHi(e.target.value)}
-                  className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-gray-800 font-sans"
+                  className="w-full p-3 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium leading-relaxed"
                 />
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={caLoading}
-                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition flex items-center gap-1.5 shadow cursor-pointer shadow-amber-600/10"
-                >
-                  <Save className="h-4 w-4" />
-                  {caLoading ? "सहेजा जा रहा है..." : caEditingId ? "अपडेट करें (Update)" : "जोड़ें (Add Article)"}
-                </button>
-                {caEditingId && (
+              {caSuccessMsg && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold">
+                  {caSuccessMsg}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={caLoading}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-2.5 rounded-xl text-xs transition flex items-center gap-2 shadow-xs cursor-pointer"
+              >
+                <Save className="h-4 w-4" />
+                {caLoading ? "सहेजा जा रहा है..." : caEditingId ? "अपडेट करें" : "करंट अफेयर्स सहेजें"}
+              </button>
+            </form>
+
+            <div className="space-y-3">
+              <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">
+                सहेजे गए करंट अफेयर्स ({currentAffairs.length})
+              </h3>
+              {currentAffairs.map((item) => (
+                <div key={item.id} className="border border-gray-200 rounded-xl p-4 bg-white flex items-start justify-between gap-4">
+                  <div className="space-y-1 flex-1">
+                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded uppercase">
+                      {item.month}
+                    </span>
+                    <p className="text-xs text-gray-700 line-clamp-3 leading-relaxed font-medium mt-1">
+                      {item.content_hi}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => handleEditCurrentAffairs(item)}
+                      className="p-1.5 hover:bg-emerald-50 text-emerald-700 rounded-lg transition"
+                      title="संपादित करें"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCurrentAffairs(item.id)}
+                      className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition"
+                      title="हटाएं"
+                    >
+                      <Trash className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ABOUT EXAM & WORD EDITOR MANAGER TAB */}
+        {activeSubTab === 'aboutExam' && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 space-y-8" id="exam-form-section">
+            <div className="border-b border-gray-100 pb-4">
+              <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                <GraduationCap className="h-5 w-5 text-emerald-600" />
+                परीक्षा जानकारी व वर्ड सम्पादक (Exam Info & Word Editor)
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                यहाँ परीक्षा का नाम चुनें/लिखें और वर्ड स्टाइल सम्पादक में सम्पूर्ण जानकारी, सिलेबस व तालिका दर्ज करें।
+              </p>
+            </div>
+
+            {/* Exam Add/Edit Form */}
+            <form onSubmit={handleSubmitExam} className="space-y-6 bg-gray-50/70 p-6 rounded-2xl border border-gray-200">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-200">
+                <h3 className="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Save className="h-4 w-4 text-emerald-600" />
+                  {examEditingId ? "परीक्षा जानकारी सम्पादित करें (Edit Exam)" : "नई परीक्षा की जानकारी जोड़ें (Add New Exam)"}
+                </h3>
+                {examEditingId && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setCaEditingId(null);
-                      setCaContentHi('');
-                    }}
-                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold px-4 py-2.5 rounded-xl text-xs transition cursor-pointer"
+                    onClick={resetExamForm}
+                    className="text-xs font-bold text-red-600 hover:bg-red-50 px-3 py-1 rounded-lg transition"
+                  >
+                    नया फॉर्म खोलें (Reset Form)
+                  </button>
+                )}
+              </div>
+
+              {/* Basic Fields Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">परीक्षा का नाम (Exam Name)*</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="उदा. CGPSC State Services (Prelims & Mains)"
+                    value={examName}
+                    onChange={(e) => setExamName(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">श्रेणी (Category)</label>
+                  <select
+                    value={examCategory}
+                    onChange={(e) => setExamCategory(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  >
+                    <option value="PSC Exams">PSC Exams (CGPSC)</option>
+                    <option value="Vyapam Exams">Vyapam Exams (व्यापमं)</option>
+                    <option value="Teaching Exams">Teaching Exams (शिक्षक भर्ती)</option>
+                    <option value="Police / Defence">Police & Defence Exams</option>
+                    <option value="Other Competitive Exams">Other Competitive Exams</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* MS Word-Style Rich Document Editor Section */}
+              <div className="space-y-3 pt-2 border-t border-gray-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="text-xs font-black text-gray-800 flex items-center gap-1.5">
+                    <FileText className="h-4 w-4 text-emerald-600" />
+                    वर्ड सम्पादक - परीक्षा विवरण व सम्पूर्ण गाइड (Word / Document Editor)
+                  </label>
+
+                  {/* View Modes */}
+                  <div className="flex items-center gap-1 bg-gray-200/80 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setEditorTab('visual')}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                        editorTab === 'visual' ? 'bg-white text-emerald-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <Edit3 className="h-3 w-3" /> वर्ड मोड
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditorTab('code')}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                        editorTab === 'code' ? 'bg-white text-emerald-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <FileCode className="h-3 w-3" /> HTML कोड
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditorTab('preview')}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                        editorTab === 'preview' ? 'bg-white text-emerald-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <Eye className="h-3 w-3" /> पूर्वावलोकन (Preview)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Toolbar */}
+                <div className="bg-white border border-gray-200 rounded-xl p-2.5 flex flex-wrap items-center gap-1.5 shadow-2xs">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pr-1">त्वरित उपकरण:</span>
+                  
+                  <button
+                    type="button"
+                    onClick={handleInsertTable}
+                    className="p-1.5 bg-gray-100 hover:bg-emerald-50 text-gray-700 hover:text-emerald-800 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-gray-200"
+                  >
+                    <Table className="h-3.5 w-3.5" /> + तालिका (Table)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleInsertLink}
+                    className="p-1.5 bg-gray-100 hover:bg-emerald-50 text-gray-700 hover:text-emerald-800 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-gray-200"
+                  >
+                    <Link className="h-3.5 w-3.5" /> + लिंक (URL)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleInsertPdfBtn}
+                    className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-red-200"
+                  >
+                    <Download className="h-3.5 w-3.5" /> + PDF बटन
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleInsertCallout}
+                    className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-amber-200"
+                  >
+                    <AlertCircle className="h-3.5 w-3.5" /> + सूचना बॉक्स
+                  </button>
+
+                  <div className="h-4 w-px bg-gray-200 mx-1"></div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleInsertTemplate('cgpsc')}
+                    className="p-1.5 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded-lg text-[11px] font-bold transition flex items-center gap-1 border border-emerald-200"
+                  >
+                    <Sparkles className="h-3 w-3 text-emerald-600" /> CGPSC टेम्पलेट
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleInsertTemplate('vyapam')}
+                    className="p-1.5 bg-blue-50 text-blue-800 hover:bg-blue-100 rounded-lg text-[11px] font-bold transition flex items-center gap-1 border border-blue-200"
+                  >
+                    <Sparkles className="h-3 w-3 text-blue-600" /> व्यापमं टेम्पलेट
+                  </button>
+                </div>
+
+                {/* Editor Content Box */}
+                {editorTab === 'visual' || editorTab === 'code' ? (
+                  <div className="space-y-1">
+                    <textarea
+                      rows={14}
+                      placeholder="यहाँ आप परीक्षा का पूरा विवरण, एग्जाम पैटर्न, पात्रता एवं विस्तृत सिलेबस अपने अनुसार लिखें या पेस्ट करें..."
+                      value={examRichContent}
+                      onChange={(e) => setExamRichContent(e.target.value)}
+                      className="w-full p-4 text-xs sm:text-sm bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono leading-relaxed"
+                    />
+                  </div>
+                ) : (
+                  <div className="p-6 bg-white border border-gray-200 rounded-2xl min-h-[300px] prose prose-emerald max-w-none text-xs sm:text-sm leading-relaxed space-y-3">
+                    {examRichContent ? (
+                      <div dangerouslySetInnerHTML={{ __html: examRichContent }} />
+                    ) : (
+                      <p className="text-gray-400 italic">पूर्वावलोकन देखने के लिए सम्पादक में सामग्री लिखें...</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex items-center gap-3 pt-3">
+                <button
+                  type="submit"
+                  disabled={examLoading}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-3 rounded-xl text-xs transition flex items-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <Save className="h-4 w-4" />
+                  {examLoading ? "सहेजा जा रहा है..." : examEditingId ? "अपडेट करें (Update Exam)" : "सहेजें (Save Exam Info)"}
+                </button>
+                {examEditingId && (
+                  <button
+                    type="button"
+                    onClick={resetExamForm}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold px-4 py-3 rounded-xl text-xs transition cursor-pointer"
                   >
                     रद्द करें (Cancel)
                   </button>
@@ -1907,50 +2074,63 @@ export default function AdminPanel({ questions, onRefreshQuestions }: AdminPanel
               </div>
             </form>
 
-            {/* List of existing current affairs */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">वर्तमान लेखों की सूची (Saved Articles List)</h3>
-              
-              <div className="grid grid-cols-1 gap-3">
-                {currentAffairs.map((item) => (
-                  <div key={item.id} className="border border-gray-100 rounded-xl bg-white hover:border-amber-200 transition p-4 flex items-start justify-between gap-4">
-                    <div className="space-y-1 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-bold">
-                        <span className="bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded-full font-bold">
-                          {item.month}
+            {/* List of Saved Exams */}
+            <div className="space-y-4 pt-2">
+              <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">
+                वर्तमान में उपलब्ध परीक्षाएं ({examsList.length})
+              </h3>
+
+              <div className="grid grid-cols-1 gap-4">
+                {examsList.map((item) => (
+                  <div key={item.id} className="border border-gray-200 rounded-2xl bg-white hover:border-emerald-300 transition p-5 space-y-3 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-2">
+                      <div>
+                        <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded uppercase">
+                          {item.category}
                         </span>
+                        <h4 className="text-sm font-extrabold text-gray-900 mt-1">
+                          {item.examName}
+                        </h4>
                       </div>
-                      <p className="text-xs text-gray-600 leading-relaxed font-sans pt-1 line-clamp-3">{item.content_hi}</p>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleEditExam(item)}
+                          className="p-2 hover:bg-emerald-50 text-emerald-700 rounded-lg transition cursor-pointer"
+                          title="संपादित करें"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteExam(item.id)}
+                          className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition cursor-pointer"
+                          title="हटाएं"
+                        >
+                          <Trash className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => handleEditCurrentAffairs(item)}
-                        className="p-1.5 hover:bg-amber-50 text-gray-400 hover:text-amber-700 rounded-lg transition cursor-pointer"
-                        title="संपादित करें (Edit)"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCurrentAffairs(item.id)}
-                        className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-lg transition cursor-pointer"
-                        title="हटाएं (Delete)"
-                      >
-                        <Trash className="h-4 w-4" />
-                      </button>
+                    <div className="text-xs text-gray-600 line-clamp-2 leading-relaxed font-sans">
+                      {item.richContent ? item.richContent.replace(/<[^>]*>?/gm, ' ').slice(0, 160) + '...' : item.overview || 'कोई विवरण नहीं'}
                     </div>
                   </div>
                 ))}
 
-                {currentAffairs.length === 0 && (
-                  <p className="text-center py-8 text-gray-400 text-xs">कोई करंट अफेयर्स लेख उपलब्ध नहीं है। नया लेख जोड़ने के लिए ऊपर दिए गए फॉर्म का उपयोग करें।</p>
+                {examsList.length === 0 && (
+                  <div className="text-center py-8 text-gray-400 text-xs">
+                    कोई परीक्षा जानकारी उपलब्ध नहीं है। ऊपर दिए गए फॉर्म से नई परीक्षा जोड़ें।
+                  </div>
                 )}
               </div>
             </div>
+
           </div>
         )}
-      </div>
 
+      </div>
     </div>
   );
 }

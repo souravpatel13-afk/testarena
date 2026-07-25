@@ -1,12 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
-import { fileURLToPath } from 'url';
-
-// Define __dirname and __filename equivalent for ES Modules if running as ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import * as XLSX from 'xlsx';
 
 const app = express();
 const PORT = 3000;
@@ -228,6 +223,116 @@ const initialCurrentAffairs = [
   }
 ];
 
+const initialExamInfo = [
+  {
+    id: "exam-cgpsc-pre",
+    examName: "CGPSC State Services (Prelims)",
+    shortTagline: "छत्तीसगढ़ लोक सेवा आयोग (CGPSC) राज्य सेवा प्रारंभिक परीक्षा",
+    category: "PSC Exams",
+    overview: "CGPSC राज्य सेवा परीक्षा छत्तीसगढ़ राज्य शासन के विभिन्न प्रशासनिक पदों (उप जिलाधिकारी, पुलिस अधीक्षक, वित्त सेवा, आदि) हेतु आयोजित की जाती है। प्रारंभिक परीक्षा एक छंटनी परीक्षा (Screening Test) है, जिसमें बहुविकल्पीय वस्तुनिष्ठ प्रश्न (MCQs) पूछे जाते हैं।",
+    eligibility: "1. शैक्षणिक योग्यता: भारत में किसी मान्यता प्राप्त विश्वविद्यालय से स्नातक (Graduation) की उपाधि।\n2. आयु सीमा: 21 वर्ष से 28/35 वर्ष (छत्तीसगढ़ के मूल निवासियों एवं आरक्षित वर्गों को नियमानुसार आयु सीमा में छूट)।",
+    selectionProcess: "1. प्रारंभिक परीक्षा (Prelims - Objective)\n2. मुख्य परीक्षा (Mains - Written Descriptive)\n3. साक्षात्कार (Interview - Personality Test)",
+    patterns: [
+      {
+        stage: "प्रश्न पत्र - I: सामान्य अध्ययन (GS Paper 1)",
+        duration: "2 घंटे (120 मिनट)",
+        totalQuestions: "100 प्रश्न",
+        totalMarks: "200 अंक",
+        negativeMarking: "1/3 नकारात्मक अंकन (-0.66 अंक)"
+      },
+      {
+        stage: "प्रश्न पत्र - II: योग्यता परीक्षा (Aptitude Test Paper 2)",
+        duration: "2 घंटे (120 मिनट)",
+        totalQuestions: "100 प्रश्न",
+        totalMarks: "200 अंक (केवल अर्हकारी - 33% उत्तीर्ण अंक)",
+        negativeMarking: "1/3 नकारात्मक अंकन (-0.66 अंक)"
+      }
+    ],
+    syllabus: [
+      {
+        paperName: "प्रश्न पत्र - 1: सामान्य अध्ययन (General Studies)",
+        topics: [
+          "भाग 1: भारत का इतिहास एवं स्वतंत्रता आंदोलन, भारत का भौतिक, सामाजिक व आर्थिक भूगोल, भारतीय संविधान एवं राजव्यवस्था, भारतीय अर्थव्यवस्था, सामान्य विज्ञान व प्रौद्योगिकी, दर्शन, कला व संस्कृति।",
+          "भाग 2: छत्तीसगढ़ का सामान्य ज्ञान - छत्तीसगढ़ का इतिहास व स्वतंत्रता आंदोलन में योगदान, छत्तीसगढ़ का भूगोल, जलवायु, नदियां, मिट्टी, जलप्रपात, छत्तीसगढ़ की जनजातियां, तीज-त्यौहार, लोक नृत्य व कला, छत्तीसगढ़ का प्रशासनिक ढांचा, पंचायती राज व स्थानीय शासन, छत्तीसगढ़ की अर्थव्यवस्था, वन व कृषि।"
+        ]
+      },
+      {
+        paperName: "प्रश्न पत्र - 2: योग्यता परीक्षा (Aptitude Test)",
+        topics: [
+          "संचार कौशल सहित अंतर-व्यक्तिगत कौशल, तार्किक तर्कशक्ति और विश्लेषणात्मक क्षमता, निर्णय लेने की क्षमता और समस्या निवारण, सामान्य मानसिक योग्यता, मूल संख्यात्मक कार्य (दसवीं कक्षा का स्तर), आंकड़ों का निर्वचन, हिंदी भाषा एवं छत्तीसगढ़ी भाषा का ज्ञान।"
+        ]
+      }
+    ],
+    pdfUrl: "https://psc.cg.gov.in/pdf/SYLLABUS/STATE_SERVICE_EXAM.pdf",
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "exam-cg-vyapam",
+    examName: "CG Vyapam (व्यापमं प्रतियोगी परीक्षाएं)",
+    shortTagline: "छत्तीसगढ़ व्यावसायिक परीक्षा मंडल (CG Vyapam) भर्ती परीक्षाएं",
+    category: "Vyapam Exams",
+    overview: "CG Vyapam द्वारा राज्य शासन के विभिन्न विभागों जैसे हॉस्टल अधीक्षक (Hostel Warden), राजस्व निरीक्षक (RI), पटवारी (Patwari), सहायक ग्रेड-3, डाटा एंट्री ऑपरेटर आदि के पदों पर सीधी भर्ती हेतु वस्तुनिष्ठ परीक्षाएं आयोजित की जाती हैं।",
+    eligibility: "1. शैक्षणिक योग्यता: पद अनुसार 12वीं उत्तीर्ण / कंप्यूटर डिप्लोमा / स्नातक (Graduation)।\n2. आयु सीमा: 18 वर्ष से 35/40 वर्ष (छत्तीसगढ़ निवासियों को नियमानुसार छूट)।",
+    selectionProcess: "1. एकल चरण वस्तुनिष्ठ लिखित परीक्षा (Single Stage Written MCQ Test)\n2. कौशल परीक्षा / दस्तावेज सत्यापन (Skill Test / Document Verification - पद अनुसार)",
+    patterns: [
+      {
+        stage: "संयुक्त लिखित परीक्षा (Written Competitive Test)",
+        duration: "3 घंटे (180 मिनट)",
+        totalQuestions: "150 प्रश्न",
+        totalMarks: "150 अंक",
+        negativeMarking: "1/4 नकारात्मक अंकन (-0.25 अंक)"
+      }
+    ],
+    syllabus: [
+      {
+        paperName: "सामान्य प्रश्न पत्र भाग (Combined Paper)",
+        topics: [
+          "कंप्यूटर का सामान्य ज्ञान (30-50 अंक): कंप्यूटर का उपयोग, ऑपरेटिंग सिस्टम, MS Office, इंटरनेट, एंटीवायरस, सर्च इंजन व मल्टीमीडिया।",
+          "छत्तीसगढ़ का सामान्य ज्ञान (20-30 अंक): छत्तीसगढ़ का इतिहास, भूगोल, संस्कृति, जनजातियां, नदियां व समसामयिकी।",
+          "सामान्य अध्ययन (25-35 अंक): भारतीय इतिहास, राजव्यवस्था, भूगोल, सामान्य विज्ञान, अर्थव्यवस्था।",
+          "सामान्य हिंदी व अंग्रेजी व्याकरण (15-20 अंक): स्वर, व्यंजन, संधि, समास, तद्भव-तत्सम, मुहावरे, Grammar, Vocabulary.",
+          "सामान्य गणित व मानसिक योग्यता (20-30 अंक): संख्या पद्धति, प्रतिशत, लाभ-हानि, अनुपात, साधारण व चक्रवृद्धि ब्याज, समय-दूरी, कोडिंग-डिकोडिंग, रीजनिंग।"
+        ]
+      }
+    ],
+    pdfUrl: "https://vyapam.cgstate.gov.in/",
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "exam-cg-teacher",
+    examName: "छत्तीसगढ़ शिक्षक व सहायक शिक्षक भर्ती",
+    shortTagline: "स्कूल शिक्षा विभाग शिक्षक, सहायक शिक्षक एवं व्याख्याता भर्ती परीक्षा",
+    category: "Teaching Exams",
+    overview: "छत्तीसगढ़ शासन के स्कूल शिक्षा विभाग द्वारा प्राथमिक (कक्षा 1 से 5) एवं उच्च प्राथमिक (कक्षा 6 से 8) शालाओं हेतु सहायक शिक्षक, शिक्षक एवं व्याख्याता के पदों पर भर्ती व्यापमं द्वारा की जाती है।",
+    eligibility: "1. सहायक शिक्षक (वर्ग-3): 12वीं में न्यूनतम 50% अंक + D.El.Ed/D.Ed + CG TET (प्राथमिक स्तर उत्तीर्ण)।\n2. शिक्षक (वर्ग-2): संबंधित विषय में स्नातक + B.Ed / D.El.Ed + CG TET (उच्च प्राथमिक स्तर उत्तीर्ण)।",
+    selectionProcess: "1. लिखित वस्तुनिष्ठ परीक्षा (Written Examination)\n2. मेरिट सूची एवं दस्तावेज सत्यापन (Merit & Document Verification)",
+    patterns: [
+      {
+        stage: "लिखित परीक्षा (Written Competitive Test)",
+        duration: "2 घंटे 30 मिनट (150 मिनट)",
+        totalQuestions: "150 प्रश्न",
+        totalMarks: "150 अंक",
+        negativeMarking: "1/4 नकारात्मक अंकन (-0.25 अंक)"
+      }
+    ],
+    syllabus: [
+      {
+        paperName: "परीक्षा पाठ्यक्रम (Syllabus Units)",
+        topics: [
+          "बाल विकास एवं शिक्षाशास्त्र (Child Development & Pedagogy) - 30 अंक",
+          "सामान्य हिंदी (General Hindi) - 25 अंक",
+          "सामान्य अंग्रेजी (General English) - 25 अंक",
+          "गणित एवं विज्ञान / सामाजिक अध्ययन (Subject Specific) - 30 अंक",
+          "कंप्यूटर संबंधी सामान्य ज्ञान (General Computer Knowledge) - 10 अंक",
+          "सामान्य ज्ञान व छत्तीसगढ़ का सामान्य ज्ञान (General Knowledge & CG GK) - 10-30 अंक"
+        ]
+      }
+    ],
+    pdfUrl: "https://vyapam.cgstate.gov.in/",
+    updatedAt: new Date().toISOString()
+  }
+];
+
 // Database Loader / Saver Helpers
 function loadDatabase() {
   try {
@@ -237,6 +342,10 @@ function loadDatabase() {
       let dirty = false;
       if (!db.currentAffairs) {
         db.currentAffairs = initialCurrentAffairs;
+        dirty = true;
+      }
+      if (!db.examInfo) {
+        db.examInfo = initialExamInfo;
         dirty = true;
       }
       if (dirty) {
@@ -254,6 +363,7 @@ function loadDatabase() {
     quizzes: initialQuizzes,
     attempts: initialAttempts,
     currentAffairs: initialCurrentAffairs,
+    examInfo: initialExamInfo,
     user: {
       id: "user-sourav",
       name: "Sourav Patel",
@@ -338,6 +448,259 @@ app.post('/api/settings', (req, res) => {
   db.settings = { ...db.settings, ...req.body };
   saveDatabase(db);
   res.json(db.settings);
+});
+
+function parseCorrectAnswerServer(rawVal: any, options: string[]): number {
+  if (rawVal === undefined || rawVal === null) return 0;
+  const valStr = String(rawVal).trim();
+  if (valStr === '') return 0;
+
+  if (/^[a-eA-E]$/.test(valStr)) {
+    return valStr.toUpperCase().charCodeAt(0) - 65;
+  }
+
+  const exactMatchIdx = options.findIndex(opt => opt && opt.trim() === valStr);
+  if (exactMatchIdx !== -1) return exactMatchIdx;
+
+  const lowerMatchIdx = options.findIndex(opt => opt && opt.trim().toLowerCase() === valStr.toLowerCase());
+  if (lowerMatchIdx !== -1) return lowerMatchIdx;
+
+  const parsed = parseInt(valStr, 10);
+  if (!isNaN(parsed)) {
+    if (parsed >= 1 && parsed <= Math.max(4, options.length)) {
+      return parsed - 1;
+    }
+    if (parsed >= 0 && parsed < Math.max(4, options.length)) {
+      return parsed;
+    }
+  }
+  return 0;
+}
+
+function processParsedRows(rawJsonRows: any[], sheetType: string, action: string, res: express.Response) {
+  const db = loadDatabase();
+
+  if (sheetType === 'currentAffairs') {
+    const parsedCA = rawJsonRows.map((r, idx) => {
+      const month = r['Month'] || r['month'] || r['माह'] || r['महीना'] || 'July 2026';
+      const title = r['Title'] || r['title'] || r['शीर्षक'] || month;
+      const category = r['Category'] || r['category'] || r['श्रेणी'] || 'General';
+      const content_hi = r['Content (HI)'] || r['Content'] || r['content_hi'] || r['विवरण'] || r['खबर'] || '';
+      const content_en = r['Content (EN)'] || r['content_en'] || '';
+
+      return {
+        id: `ca-sheet-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        month: String(month).trim(),
+        title: String(title).trim(),
+        category: String(category).trim(),
+        content_hi: String(content_hi).trim(),
+        content_en: String(content_en).trim(),
+        createdAt: new Date().toISOString()
+      };
+    }).filter(ca => ca.content_hi.length > 0 || ca.title.length > 0);
+
+    if (parsedCA.length === 0) {
+      return res.status(400).json({ error: "करंट अफेयर्स शीट में कोई मान्य पंक्तियाँ नहीं मिलीं। कृपया ध्यान दें कि विवरण (Content HI) कॉलम में सामग्री होनी चाहिए।" });
+    }
+
+    if (action === 'import_replace') {
+      db.currentAffairs = parsedCA;
+      saveDatabase(db);
+      return res.json({
+        success: true,
+        message: `सफलतापूर्वक सभी पुराने डेटा को बदलकर ${parsedCA.length} नए करंट अफेयर्स आइटम सहेजे गए!`,
+        count: parsedCA.length,
+        items: parsedCA
+      });
+    } else if (action === 'import_append') {
+      db.currentAffairs = db.currentAffairs || [];
+      db.currentAffairs.push(...parsedCA);
+      saveDatabase(db);
+      return res.json({
+        success: true,
+        message: `सफलतापूर्वक ${parsedCA.length} नए करंट अफेयर्स आइटम डेटाबेस में जोड़े गए!`,
+        count: parsedCA.length,
+        items: parsedCA
+      });
+    } else {
+      return res.json({
+        success: true,
+        message: `सफलतापूर्वक ${parsedCA.length} करंट अफेयर्स पंक्तियाँ पढ़ी गईं!`,
+        count: parsedCA.length,
+        items: parsedCA
+      });
+    }
+  }
+
+  // Question parsing for PYQ or Subject
+  const parsedQuestions = rawJsonRows.map((r, idx) => {
+    const textHi = r['Question (HI)'] || r['Question'] || r['Question (Hindi)'] || r['question_hi'] || r['text_hi'] || r['प्रश्न'] || r['प्रश्न (हिन्दी)'] || '';
+    const textEn = r['Question (EN)'] || r['Question (English)'] || r['question_en'] || r['text_en'] || r['प्रश्न (अंग्रेजी)'] || '';
+
+    const optA = r['Option A'] || r['Option A (HI)'] || r['Option 1'] || r['option_a'] || r['विकल्प A'] || r['विकल्प 1'] || '';
+    const optB = r['Option B'] || r['Option B (HI)'] || r['Option 2'] || r['option_b'] || r['विकल्प B'] || r['विकल्प 2'] || '';
+    const optC = r['Option C'] || r['Option C (HI)'] || r['Option 3'] || r['option_c'] || r['विकल्प C'] || r['विकल्प 3'] || '';
+    const optD = r['Option D'] || r['Option D (HI)'] || r['Option 4'] || r['option_d'] || r['विकल्प D'] || r['विकल्प 4'] || '';
+
+    const opts = [optA, optB, optC, optD].map(o => String(o || '').trim());
+    const options_hi = opts.filter(Boolean).length >= 2 ? opts : ['विकल्प A', 'विकल्प B', 'विकल्प C', 'विकल्प D'];
+
+    const ansRaw = r['Correct Answer'] || r['Answer'] || r['correct_answer'] || r['उत्तर'] || r['सही उत्तर'] || '0';
+    const correctAnswer = parseCorrectAnswerServer(ansRaw, options_hi);
+
+    let defaultSub = 'Chhattisgarh General Knowledge';
+    if (sheetType === 'subject') defaultSub = 'Chhattisgarh General Knowledge';
+
+    const subject = r['Subject'] || r['subject'] || r['विषय'] || defaultSub;
+    const topic = r['Topic'] || r['topic'] || r['विषय-वस्तु'] || r['टॉपिक'] || 'सामान्य परिचय';
+    const exam = r['Exam'] || r['exam'] || r['परीक्षा'] || (sheetType === 'pyq' ? 'CGPSC Prelims' : '');
+    const yearRaw = r['Year'] || r['year'] || r['वर्ष'];
+    const year = yearRaw ? parseInt(String(yearRaw)) : undefined;
+
+    const explanation_hi = r['Explanation (HI)'] || r['Explanation'] || r['explanation_hi'] || r['व्याख्या'] || r['व्याख्या (हिन्दी)'] || '';
+    const explanation_en = r['Explanation (EN)'] || r['explanation_en'] || r['व्याख्या (अंग्रेजी)'] || '';
+
+    return {
+      id: `q-sheet-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      text_hi: String(textHi).trim(),
+      text_en: String(textEn).trim(),
+      options_hi,
+      options_en: [],
+      correctAnswer,
+      subject: String(subject).trim(),
+      topic: String(topic).trim(),
+      exam: String(exam || '').trim(),
+      year: (year && !isNaN(year)) ? year : undefined,
+      explanation_hi: String(explanation_hi).trim(),
+      explanation_en: String(explanation_en).trim()
+    };
+  }).filter(q => q.text_hi.length > 0);
+
+  if (parsedQuestions.length === 0) {
+    return res.status(400).json({ error: "शीट में कोई मान्य प्रश्न नहीं मिले। कृपया सुनिश्चित करें कि पहली पंक्ति में 'Question (HI)', 'Option A', 'Option B', 'Correct Answer' हेडर मौजूद हैं।" });
+  }
+
+  if (action === 'import_replace') {
+    db.questions = parsedQuestions;
+    saveDatabase(db);
+    return res.json({
+      success: true,
+      message: `सफलतापूर्वक सभी पुराने प्रश्नों को बदलकर ${parsedQuestions.length} नए प्रश्न सहेजे गए!`,
+      count: parsedQuestions.length,
+      items: parsedQuestions
+    });
+  } else if (action === 'import_append') {
+    db.questions = db.questions || [];
+    db.questions.push(...parsedQuestions);
+    saveDatabase(db);
+    return res.json({
+      success: true,
+      message: `सफलतापूर्वक ${parsedQuestions.length} नए प्रश्न डेटाबेस में जोड़े गए!`,
+      count: parsedQuestions.length,
+      items: parsedQuestions
+    });
+  } else {
+    return res.json({
+      success: true,
+      message: `सफलतापूर्वक ${parsedQuestions.length} प्रश्न पढ़े गए!`,
+      count: parsedQuestions.length,
+      items: parsedQuestions
+    });
+  }
+}
+
+// Pull & Sync Google Sheet Endpoint
+app.post('/api/pull-sheet', async (req, res) => {
+  try {
+    const { sheetInput, sheetType = 'pyq', action = 'preview', accessToken } = req.body;
+    if (!sheetInput || typeof sheetInput !== 'string' || !sheetInput.trim()) {
+      return res.status(400).json({ error: "कृपया एक वैध गूगल शीट ID या URL दर्ज करें।" });
+    }
+
+    const trimmed = sheetInput.trim();
+    const matchId = trimmed.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    const sheetId = matchId ? matchId[1] : trimmed;
+    
+    const matchGid = trimmed.match(/[?&]gid=([0-9]+)/);
+    const gid = matchGid ? matchGid[1] : null;
+
+    let csvText = '';
+    let fetchedOk = false;
+
+    // Method 1: OAuth token if present
+    if (accessToken) {
+      try {
+        const range = 'A1:Z1000';
+        const googleApiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`;
+        const gRes = await fetch(googleApiUrl, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (gRes.ok) {
+          const gData = await gRes.json();
+          const rows = gData.values || [];
+          if (rows.length > 1) {
+            const headers = rows[0];
+            const dataRows = rows.slice(1);
+            const jsonObjects = dataRows.map((r: any) => {
+              const obj: any = {};
+              headers.forEach((h: string, i: number) => {
+                obj[h] = r[i] !== undefined ? r[i] : '';
+              });
+              return obj;
+            });
+            return processParsedRows(jsonObjects, sheetType, action, res);
+          }
+        }
+      } catch (err) {
+        console.warn("Google Sheets API fetch failed, trying export URLs:", err);
+      }
+    }
+
+    // Method 2: Public CSV Export URLs from server
+    const exportUrls = [
+      `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gid ? '&gid=' + gid : ''}`,
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv${gid ? '&gid=' + gid : ''}`,
+      `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv${gid ? '&gid=' + gid : ''}`
+    ];
+
+    for (const url of exportUrls) {
+      try {
+        const fetchRes = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        if (fetchRes.ok) {
+          const text = await fetchRes.text();
+          if (text && !text.includes('<!DOCTYPE html>') && !text.includes('<html')) {
+            csvText = text;
+            fetchedOk = true;
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed fetch from ${url}:`, e);
+      }
+    }
+
+    if (!fetchedOk || !csvText) {
+      return res.status(400).json({
+        error: "गूगल शीट से कनेक्ट नहीं हो सका। कृपया सुनिश्चित करें कि गूगल शीट की शेयर सेटिंग्स में 'Anyone with link can view' (कोई भी व्यक्ति जिसके पास लिंक है वो देख सकता है) चुना गया है।"
+      });
+    }
+
+    const workbook = XLSX.read(csvText, { type: 'string' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const rawJsonRows: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+    if (!rawJsonRows || rawJsonRows.length === 0) {
+      return res.status(400).json({ error: "गूगल शीट खाली मिली या पंक्तियाँ पढ़ी नहीं जा सकीं।" });
+    }
+
+    return processParsedRows(rawJsonRows, sheetType, action, res);
+  } catch (err: any) {
+    console.error("Error in /api/pull-sheet:", err);
+    return res.status(500).json({ error: "शीट प्रोसेस करने में त्रुटि: " + (err.message || String(err)) });
+  }
 });
 
 // Bulk upload questions (JSON array)
@@ -681,6 +1044,60 @@ app.post('/api/current-affairs/replace', (req, res) => {
   res.json({ message: "Current affairs replaced successfully", count: newCA.length });
 });
 
+// Exam Info Endpoints (About Exam & Syllabus Section)
+app.get('/api/exam-info', (req, res) => {
+  const db = loadDatabase();
+  res.json(db.examInfo || []);
+});
+
+app.post('/api/exam-info', (req, res) => {
+  const db = loadDatabase();
+  const newItem = req.body;
+  if (!newItem.id) {
+    newItem.id = "exam-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5);
+  }
+  newItem.updatedAt = new Date().toISOString();
+  db.examInfo = db.examInfo || [];
+  
+  const existingIdx = db.examInfo.findIndex((item: any) => item.id === newItem.id);
+  if (existingIdx > -1) {
+    db.examInfo[existingIdx] = newItem;
+  } else {
+    db.examInfo.push(newItem);
+  }
+  
+  saveDatabase(db);
+  res.status(201).json(newItem);
+});
+
+app.put('/api/exam-info/:id', (req, res) => {
+  const db = loadDatabase();
+  const { id } = req.params;
+  const updatedItem = req.body;
+  updatedItem.id = id;
+  updatedItem.updatedAt = new Date().toISOString();
+
+  db.examInfo = db.examInfo || [];
+  const existingIdx = db.examInfo.findIndex((item: any) => item.id === id);
+  if (existingIdx > -1) {
+    db.examInfo[existingIdx] = updatedItem;
+  } else {
+    db.examInfo.push(updatedItem);
+  }
+
+  saveDatabase(db);
+  res.json(updatedItem);
+});
+
+app.delete('/api/exam-info/:id', (req, res) => {
+  const db = loadDatabase();
+  const { id } = req.params;
+  db.examInfo = db.examInfo || [];
+  db.examInfo = db.examInfo.filter((item: any) => item.id !== id);
+  saveDatabase(db);
+  res.json({ message: "Exam info deleted successfully", id });
+});
+
 // SEO Route: robots.txt
 app.get('/robots.txt', (req, res) => {
   const robotsTxt = `User-agent: *
@@ -792,15 +1209,18 @@ app.get('/sitemap.xml', (req, res) => {
 
 // Setup Vite & Static Assets serving
 async function startServer() {
-  // Serve static dist directory in production, otherwise Vite dev server
-  if (process.env.NODE_ENV !== "production") {
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+  const isProduction = process.env.NODE_ENV === "production" || hasDist;
+
+  if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     // SPA fallback
     app.get('*', (req, res) => {
@@ -809,7 +1229,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Server] Running full-stack on http://0.0.0.0:${PORT}`);
+    console.log(`[Server] Running in ${isProduction ? 'production' : 'development'} mode on http://0.0.0.0:${PORT}`);
   });
 }
 

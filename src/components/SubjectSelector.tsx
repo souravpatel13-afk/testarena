@@ -104,7 +104,7 @@ export default function SubjectSelector({ quizzes, questions, onSelectQuiz, onSt
             Strengthen Your Concepts
           </h1>
           <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-sans">
-            यहाँ गूगल शीट में दिए गए सभी विषयों के आधार पर अभ्यास टेस्ट उपलब्ध हैं। अपनी सुविधानुसार पूरे विषय का टेस्ट दें या विशिष्ट टॉपिक चुनकर टॉपिकवाइज़ अभ्यास करें।
+            विभिन्न विषयों एवं अध्यायों का विषय-वार व टॉपिक-वार अभ्यास करें।
           </p>
 
           {/* Filters & Subtab Row in Banner */}

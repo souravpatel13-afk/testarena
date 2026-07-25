@@ -32,7 +32,7 @@ export const isPyq = (q: Question | undefined | null): boolean => {
  */
 export const isSubjectTestQuestion = (q: Question | undefined | null): boolean => {
   if (!q) return false;
-  return !isPyq(q) && !!q.subject && q.subject.trim() !== '';
+  return !isPyq(q) && !!q.subject && typeof q.subject === 'string' && q.subject.trim() !== '';
 };
 
 /**
