@@ -1021,16 +1021,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
           <Search className="h-4 w-4" /> प्रश्न सूची ({questions.length})
         </button>
 
-        <button
-          onClick={() => setActiveSubTab('currentAffairs')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
-            activeSubTab === 'currentAffairs'
-              ? 'bg-emerald-800 text-white shadow-sm'
-              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
-          }`}
-        >
-          <Newspaper className="h-4 w-4" /> करंट अफेयर्स
-        </button>
+        {/* Current Affairs subtab temporarily hidden until ready */}
 
         <button
           onClick={() => setActiveSubTab('aboutExam')}

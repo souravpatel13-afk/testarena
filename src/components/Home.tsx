@@ -76,7 +76,7 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
             Your Path to Success in Exams, <br />Now Made Crystal Clear.
           </h1>
           <p className="text-sm md:text-base text-emerald-100/90 leading-relaxed max-w-2xl font-light">
-            नवीनतम परीक्षा पैटर्न के अनुरूप प्रश्नों, विगत वर्ष के हल प्रश्न पत्रों (PYQs), और विस्तृत समसामयिकी (Current Affairs) के साथ अपनी सरकारी नौकरी की तैयारी को एक नया आयाम दें।
+            नवीनतम परीक्षा पैटर्न के अनुरूप प्रश्नों और विगत वर्ष के हल प्रश्न पत्रों (PYQs) के साथ अपनी सरकारी नौकरी की तैयारी को एक नया आयाम दें।
           </p>
 
           <div className="flex flex-wrap gap-4 pt-3">

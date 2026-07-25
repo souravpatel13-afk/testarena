@@ -175,7 +175,6 @@ export default function App() {
     { id: 'exam-info', label: 'Exam Info & Syllabus', icon: GraduationCap },
     { id: 'pyqs', label: 'PYQs Practice', icon: History },
     { id: 'subjects', label: 'Subject Tests', icon: BookOpen },
-    { id: 'current-affairs', label: 'Current Affairs', icon: Newspaper },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'about', label: 'About Us', icon: Info },
     { id: 'contact', label: 'Contact Us', icon: Mail },
