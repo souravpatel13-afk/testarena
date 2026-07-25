@@ -17,7 +17,8 @@ import {
   Info,
   Mail,
   Home as HomeIcon,
-  Newspaper
+  Newspaper,
+  LogOut
 } from 'lucide-react';
 import { Question, Quiz, User, CurrentAffairsItem, ExamInfo } from './types';
 import Home from './components/Home';
@@ -32,7 +33,7 @@ import AdminPanel from './components/AdminPanel';
 import AboutExam from './components/AboutExam';
 import { PrivacyPolicy, TermsConditions, Disclaimer } from './components/LegalPages';
 import SEOHead from './components/SEOHead';
-import { auth } from './lib/firebase';
+import { auth, logout } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 export default function App() {
@@ -239,6 +240,18 @@ export default function App() {
             <div className="p-2 bg-slate-800 text-emerald-400 rounded-full border border-slate-700">
               <UserIcon className="h-4 w-4" />
             </div>
+            {fbUser && (
+              <button
+                onClick={async () => {
+                  await logout();
+                  if (activeTab === 'admin') setActiveTab('home');
+                }}
+                title="Log out"
+                className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
           {/* Mobile Hamburg Toggle Button */}

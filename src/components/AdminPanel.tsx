@@ -843,10 +843,15 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   };
 
   const handleLogout = async () => {
-    if (confirm("Are you sure you want to log out?")) {
+    try {
+      setAuthLoading(true);
       await logout();
       setUser(null);
       setToken(null);
+    } catch (err: any) {
+      console.error("Logout error:", err);
+    } finally {
+      setAuthLoading(false);
     }
   };
 
