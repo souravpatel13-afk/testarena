@@ -40,7 +40,10 @@ import {
   FileText,
   Layout,
   CheckCircle2,
-  UploadCloud
+  UploadCloud,
+  ArrowUp,
+  ArrowDown,
+  Star
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Question, ExamInfo } from '../types';
@@ -430,27 +433,74 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
         const data: any[] = XLSX.utils.sheet_to_json(ws);
 
         const questionsParsed = data.map((r, idx) => {
-          const textHi = r['Question (HI)'] || r['Question'] || r['Question (Hindi)'] || r['question_hi'] || r['text_hi'] || '';
-          const textEn = r['Question (EN)'] || r['Question (English)'] || r['question_en'] || r['text_en'] || '';
-          const optA = r['Option A'] || r['Option A (HI)'] || r['Option 1'] || r['option_a'] || '';
-          const optB = r['Option B'] || r['Option B (HI)'] || r['Option 2'] || r['option_b'] || '';
-          const optC = r['Option C'] || r['Option C (HI)'] || r['Option 3'] || r['option_c'] || '';
-          const optD = r['Option D'] || r['Option D (HI)'] || r['Option 4'] || r['option_d'] || '';
-          const ansRaw = r['Correct Answer'] || r['Answer'] || r['correct_answer'] || r['CorrectAnswer'] || '0';
+          const cleanStr = (val: any) => {
+            if (val === undefined || val === null) return '';
+            return String(val).replace(/\u00a0/g, ' ').trim();
+          };
+
+          const getV = (patterns: (string | RegExp)[]) => {
+            const keys = Object.keys(r);
+            for (const pat of patterns) {
+              for (const k of keys) {
+                const val = cleanStr(r[k]);
+                if (!val) continue;
+
+                const keyTrim = k.replace(/\u00a0/g, ' ').trim();
+                const keyNorm = keyTrim.toLowerCase().replace(/[\s\-_()]/g, '');
+
+                if (typeof pat === 'string') {
+                  const patNorm = pat.toLowerCase().replace(/[\s\-_()]/g, '');
+                  if (keyNorm === patNorm || keyTrim === pat) {
+                    return val;
+                  }
+                } else if (pat.test(keyTrim) || pat.test(keyNorm)) {
+                  return val;
+                }
+              }
+            }
+            return '';
+          };
+
+          const textHi = getV(['text_hi', 'question_hi', 'Question (HI)', 'Question', 'Question (Hindi)', 'text', 'प्रश्न', 'प्रश्न (हिन्दी)']);
+          const textEn = getV(['text_en', 'question_en', 'Question (EN)', 'Question (English)', 'प्रश्न (अंग्रेजी)']);
+
+          const opt1 = getV([
+            'option_hi_1', 'option_hi_a', 'option_1', 'option_a', 'option1', 'optiona',
+            'Option A', 'Option A (HI)', 'Option 1', 'OptionA', 'विकल्प A', 'विकल्प 1', 'A', 'a', '(A)', '(a)', 'Ans A'
+          ]);
+          const opt2 = getV([
+            'option_hi_2', 'option_hi_b', 'option_2', 'option_b', 'option2', 'optionb',
+            'Option B', 'Option B (HI)', 'Option 2', 'OptionB', 'विकल्प B', 'विकल्प 2', 'B', 'b', '(B)', '(b)', 'Ans B'
+          ]);
+          const opt3 = getV([
+            'option_hi_3', 'option_hi_c', 'option_3', 'option_c', 'option3', 'optionc',
+            'Option C', 'Option C (HI)', 'Option 3', 'OptionC', 'विकल्प C', 'विकल्प 3', 'C', 'c', '(C)', '(c)', 'Ans C'
+          ]);
+          const opt4 = getV([
+            'option_hi_4', 'option_hi_d', 'option_4', 'option_d', 'option4', 'optiond',
+            'Option D', 'Option D (HI)', 'Option 4', 'OptionD', 'विकल्प D', 'विकल्प 4', 'D', 'd', '(D)', '(d)', 'Ans D'
+          ]);
+          const opt5 = getV([
+            'option_hi_5', 'option_hi_e', 'option_5', 'option_e', 'option5', 'optione',
+            'Option E', 'Option E (HI)', 'Option 5', 'OptionE', 'विकल्प E', 'विकल्प 5', 'E', 'e', '(E)', '(e)', 'Ans E'
+          ]);
+
+          const options_hi = [opt1, opt2, opt3, opt4, opt5].filter(Boolean);
+          const ansRaw = getV(['correctAnswer', 'Correct Answer', 'Answer', 'correct_answer', 'CorrectAnswer', 'उत्तर', 'सही उत्तर']) || '1';
 
           return {
             id: `q-excel-${Date.now()}-${idx}`,
             text_hi: textHi,
             text_en: textEn,
-            options_hi: [optA, optB, optC, optD].filter(Boolean).length >= 2 ? [optA, optB, optC, optD] : ['विकल्प A', 'विकल्प B', 'विकल्प C', 'विकल्प D'],
+            options_hi,
             options_en: [],
-            correctAnswer: parseCorrectAnswer(ansRaw, [optA, optB, optC, optD]),
-            subject: r['Subject'] || r['subject'] || 'Chhattisgarh General Knowledge',
-            topic: r['Topic'] || r['topic'] || 'सामान्य परिचय',
-            exam: r['Exam'] || r['exam'] || '',
-            year: r['Year'] ? parseInt(r['Year']) : undefined,
-            explanation_hi: r['Explanation (HI)'] || r['Explanation'] || r['explanation_hi'] || '',
-            explanation_en: r['Explanation (EN)'] || r['explanation_en'] || ''
+            correctAnswer: parseCorrectAnswer(ansRaw, options_hi),
+            subject: getV(['subject', 'Subject', 'विषय']) || 'Chhattisgarh General Knowledge',
+            topic: getV(['topic', 'Topic', 'विषय-वस्तु', 'टॉपिक']) || 'सामान्य परिचय',
+            exam: getV(['exam', 'Exam', 'परीक्षा']) || '',
+            year: getV(['year', 'Year', 'वर्ष']) ? parseInt(getV(['year', 'Year', 'वर्ष'])) : undefined,
+            explanation_hi: getV(['explanation_hi', 'Explanation (HI)', 'Explanation', 'व्याख्या']),
+            explanation_en: getV(['explanation_en', 'Explanation (EN)'])
           };
         }).filter(q => q.text_hi.trim() !== '');
 
@@ -755,6 +805,48 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
       console.error(err);
       alert("हटाने में त्रुटि हुई।");
     }
+  };
+
+  const saveExamsSequence = async (newList: ExamInfo[]) => {
+    setExamsList(newList);
+    try {
+      const res = await fetch('/api/exam-info-reorder', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newList)
+      });
+      if (res.ok && onRefreshExams) {
+        onRefreshExams();
+      }
+    } catch (err) {
+      console.error("Failed to reorder exams:", err);
+    }
+  };
+
+  const handleMoveExamUp = (index: number) => {
+    if (index <= 0) return;
+    const newList = [...examsList];
+    const temp = newList[index];
+    newList[index] = newList[index - 1];
+    newList[index - 1] = temp;
+    saveExamsSequence(newList);
+  };
+
+  const handleMoveExamDown = (index: number) => {
+    if (index >= examsList.length - 1) return;
+    const newList = [...examsList];
+    const temp = newList[index];
+    newList[index] = newList[index + 1];
+    newList[index + 1] = temp;
+    saveExamsSequence(newList);
+  };
+
+  const handleSetDefaultExam = (index: number) => {
+    if (index === 0) return;
+    const newList = [...examsList];
+    const [target] = newList.splice(index, 1);
+    newList.unshift(target);
+    saveExamsSequence(newList);
   };
 
   // Current Affairs handlers
@@ -2132,48 +2224,107 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
 
             {/* List of Saved Exams */}
             <div className="space-y-4 pt-2">
-              <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">
-                वर्तमान में उपलब्ध परीक्षाएं ({examsList.length})
-              </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">
+                  वर्तमान में उपलब्ध परीक्षाएं ({examsList.length}) - अनुक्रम (Sequence) प्रबंधक
+                </h3>
+                <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg font-medium">
+                  💡 पहला (Top) परीक्षा डिफ़ॉल्ट रूप से चुनी जाती है।
+                </span>
+              </div>
 
               <div className="grid grid-cols-1 gap-4">
-                {examsList.map((item) => (
-                  <div key={item.id} className="border border-gray-200 rounded-2xl bg-white hover:border-emerald-300 transition p-5 space-y-3 shadow-2xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-2">
-                      <div>
-                        <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded uppercase">
-                          {item.category}
-                        </span>
-                        <h4 className="text-sm font-extrabold text-gray-900 mt-1">
-                          {item.examName}
-                        </h4>
+                {examsList.map((item, index) => {
+                  const isDefault = index === 0;
+                  return (
+                    <div 
+                      key={item.id} 
+                      className={`border rounded-2xl bg-white transition p-5 space-y-3 shadow-2xs ${
+                        isDefault ? 'border-amber-400/80 ring-2 ring-amber-400/20 bg-amber-50/20' : 'border-gray-200 hover:border-emerald-300'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {isDefault ? (
+                              <span className="text-[10px] font-extrabold bg-amber-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-2xs">
+                                <Star className="h-3 w-3 fill-white" /> डिफ़ॉल्ट (पहला क्रम)
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                                क्रम #{index + 1}
+                              </span>
+                            )}
+                            <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded uppercase">
+                              {item.category}
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-extrabold text-gray-900 mt-1">
+                            {item.examName}
+                          </h4>
+                        </div>
+
+                        {/* Actions & Reordering Controls */}
+                        <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                          {!isDefault && (
+                            <button
+                              type="button"
+                              onClick={() => handleSetDefaultExam(index)}
+                              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                              title="इसे पहला/डिफ़ॉल्ट बनाएं"
+                            >
+                              <Star className="h-3.5 w-3.5 text-amber-600" /> डिफ़ॉल्ट बनाएं
+                            </button>
+                          )}
+
+                          <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveExamUp(index)}
+                              disabled={index === 0}
+                              className="p-1.5 text-gray-700 hover:bg-white rounded transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+                              title="ऊपर लाएं (Move Up)"
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveExamDown(index)}
+                              disabled={index === examsList.length - 1}
+                              className="p-1.5 text-gray-700 hover:bg-white rounded transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+                              title="नीचे ले जाएं (Move Down)"
+                            >
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="h-4 w-px bg-gray-200 mx-0.5"></div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleEditExam(item)}
+                            className="p-2 hover:bg-emerald-50 text-emerald-700 rounded-lg transition cursor-pointer"
+                            title="संपादित करें"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteExam(item.id)}
+                            className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition cursor-pointer"
+                            title="हटाएं"
+                          >
+                            <Trash className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleEditExam(item)}
-                          className="p-2 hover:bg-emerald-50 text-emerald-700 rounded-lg transition cursor-pointer"
-                          title="संपादित करें"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteExam(item.id)}
-                          className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition cursor-pointer"
-                          title="हटाएं"
-                        >
-                          <Trash className="h-4 w-4" />
-                        </button>
+                      <div className="text-xs text-gray-600 line-clamp-2 leading-relaxed font-sans">
+                        {item.richContent ? item.richContent.replace(/<[^>]*>?/gm, ' ').slice(0, 160) + '...' : item.overview || 'कोई विवरण नहीं'}
                       </div>
                     </div>
-
-                    <div className="text-xs text-gray-600 line-clamp-2 leading-relaxed font-sans">
-                      {item.richContent ? item.richContent.replace(/<[^>]*>?/gm, ' ').slice(0, 160) + '...' : item.overview || 'कोई विवरण नहीं'}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {examsList.length === 0 && (
                   <div className="text-center py-8 text-gray-400 text-xs">

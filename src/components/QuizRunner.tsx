@@ -504,10 +504,11 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
 
                   {/* Options render with tags */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-                    {q.options_hi.slice(0, 4).map((optHi, optIdx) => {
+                    {q.options_hi.slice(0, 5).map((optHi, optIdx) => {
                       const optEn = q.options_en?.[optIdx];
                       const isOptionCorrect = optIdx === q.correctAnswer;
                       const isOptionSelected = optIdx === userAnsIdx;
+                      const displayOpt = (optHi && !/^विकल्प [A-D1-4]$/i.test(optHi.trim())) ? optHi : (optEn || optHi || `Option ${String.fromCharCode(65 + optIdx)}`);
 
                       let optBorderClass = 'border-gray-100';
                       let optBgClass = 'bg-gray-50/50';
@@ -530,7 +531,7 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
                         >
                           <div>
                             <span className="font-bold text-gray-500 mr-2 uppercase">{String.fromCharCode(65 + optIdx)}.</span>
-                            <span className="font-semibold text-gray-800 font-sans">{optHi}</span>
+                            <span className="font-semibold text-gray-800 font-sans">{displayOpt}</span>
                           </div>
 
                           {labelBadge === 'correct' && (
@@ -652,8 +653,9 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
 
             {/* Option choices with immediate feedback if in practice mode */}
             <div className="space-y-3">
-              {activeQuestion.options_hi.slice(0, 4).map((optHi, optIdx) => {
+              {activeQuestion.options_hi.slice(0, 5).map((optHi, optIdx) => {
                 const optEn = activeQuestion.options_en?.[optIdx];
+                const displayOpt = (optHi && !/^विकल्प [A-D1-4]$/i.test(optHi.trim())) ? optHi : (optEn || optHi || `Option ${String.fromCharCode(65 + optIdx)}`);
                 const isSelected = answers[activeQuestion.id] === optIdx;
                 const isCorrect = optIdx === activeQuestion.correctAnswer;
                 const hasBeenAnswered = answers[activeQuestion.id] !== undefined;
@@ -710,7 +712,7 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
 
                       <div className="text-xs sm:text-sm">
                         <span className="font-bold text-gray-500 mr-2 uppercase">{String.fromCharCode(65 + optIdx)}.</span>
-                        <span className="font-semibold text-gray-800 font-sans">{optHi}</span>
+                        <span className="font-semibold text-gray-800 font-sans">{displayOpt}</span>
                       </div>
                     </div>
 

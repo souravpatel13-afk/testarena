@@ -11,16 +11,25 @@ import {
   Users,
   GraduationCap
 } from 'lucide-react';
-import { ExamInfo } from '../types';
+import { ExamInfo, Question } from '../types';
 
 interface HomeProps {
   onNavigate: (tab: 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'exam-info') => void;
   questionsCount: number;
   quizzesCount: number;
   exams?: ExamInfo[];
+  questions?: Question[];
 }
 
-export default function Home({ onNavigate, questionsCount, quizzesCount, exams = [] }: HomeProps) {
+export default function Home({ onNavigate, questionsCount, quizzesCount, exams = [], questions = [] }: HomeProps) {
+  const realQuestionsCount = questionsCount || questions.length || 0;
+  
+  const uniqueTopics = new Set(questions.map(q => q.topic).filter(Boolean));
+  const realTopicsCount = uniqueTopics.size > 0 ? uniqueTopics.size : (quizzesCount || 0);
+
+  const uniqueExams = new Set(questions.map(q => q.exam).filter(Boolean));
+  const realExamsCount = exams.length > 0 ? exams.length : (uniqueExams.size > 0 ? uniqueExams.size : 0);
+
   const successPoints = [
     {
       title: 'Master Core Concepts & Syllabus',
@@ -64,81 +73,75 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-12 font-sans fade-in" id="home-view-container">
       
-      {/* Premium Animated Landing Hero with rich dark-to-emerald gradient */}
-      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-800 via-emerald-950 to-slate-950 text-white shadow-xl transform transition-transform duration-500 hover:scale-[1.005]">
-        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:20px_20px]"></div>
-        
-        <div className="relative p-8 md:p-14 lg:p-18 max-w-4xl space-y-6">
-          <span className="text-xs font-bold uppercase tracking-widest text-emerald-300 bg-emerald-900/50 px-4 py-1.5 rounded-full border border-emerald-700/80 inline-block animate-pulse">
-            Competitive Exams Preparation & Practice Portal
-          </span>
-          <h1 className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tight leading-none">
-            Your Path to Success in Exams, <br />Now Made Crystal Clear.
-          </h1>
-          <p className="text-sm md:text-base text-emerald-100/90 leading-relaxed max-w-2xl font-light">
-            नवीनतम परीक्षा पैटर्न के अनुरूप प्रश्नों और विगत वर्ष के हल प्रश्न पत्रों (PYQs) के साथ अपनी सरकारी नौकरी की तैयारी को एक नया आयाम दें।
-          </p>
-
-          <div className="flex flex-wrap gap-4 pt-3">
-            <button
-              onClick={() => onNavigate('pyqs')}
-              className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold px-6 py-3 rounded-xl text-xs transition-all duration-200 flex items-center gap-1.5 shadow-md shadow-emerald-950/20 transform hover:-translate-y-0.5"
-            >
-              Practice PYQs <Play className="h-3 w-3 fill-current" />
-            </button>
+      {/* Hero Banner in Green Shade matched to Test Arena identity */}
+      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-emerald-800 via-emerald-900 to-teal-950 text-white shadow-2xl p-8 md:p-12 lg:p-16 border border-emerald-700/50">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          
+          {/* Left Column Text & CTA */}
+          <div className="lg:col-span-7 space-y-6">
+            <span className="text-xs font-black uppercase tracking-widest text-emerald-200 bg-emerald-950/60 px-4 py-1.5 rounded-full backdrop-blur-md inline-block border border-emerald-600/40">
+              TEST ARENA
+            </span>
             
-            <button
-              onClick={() => onNavigate('subjects')}
-              className="bg-white/10 hover:bg-white/20 text-white font-extrabold px-6 py-3 rounded-xl text-xs transition-all border border-white/15 flex items-center gap-1 transform hover:-translate-y-0.5"
-            >
-              Start Subject Tests <ChevronRight className="h-4 w-4" />
-            </button>
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-tight text-white">
+              Crack Your Exam <br />
+              <span className="text-yellow-300">With Smart Practice</span>
+            </h1>
 
-            <button
-              onClick={() => onNavigate('exam-info')}
-              className="bg-emerald-900/60 hover:bg-emerald-900/90 text-emerald-200 font-extrabold px-6 py-3 rounded-xl text-xs transition-all border border-emerald-700/80 flex items-center gap-1.5 transform hover:-translate-y-0.5 cursor-pointer"
-            >
-              <GraduationCap className="h-4 w-4 text-emerald-400" /> परीक्षा पैटर्न व सिलेबस
-            </button>
-          </div>
-        </div>
-      </div>
+            <p className="text-base md:text-lg text-emerald-100/90 font-medium max-w-xl leading-relaxed">
+              Practice thousands of questions, improve accuracy and achieve your goal.
+            </p>
 
-      {/* Stats Block (Pinterest style counter badges) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-50 text-emerald-700 rounded-xl">
-              <BookOpen className="h-6 w-6" />
-            </div>
-            <div>
-              <span className="text-2xl font-extrabold text-gray-900 block tracking-tight">{questionsCount > 0 ? questionsCount : '2,000+'}</span>
-              <span className="text-[11px] text-gray-400 font-bold uppercase">Verified Practice MCQs</span>
+            <div className="flex flex-wrap items-center gap-4 pt-2">
+              <button
+                onClick={() => onNavigate('subjects')}
+                className="bg-yellow-400 hover:bg-yellow-300 text-gray-950 font-black px-8 py-4 rounded-full text-sm shadow-xl transition-all transform hover:scale-105 flex items-center gap-2 cursor-pointer"
+              >
+                🚀 Start Practice
+              </button>
+
+              <button
+                onClick={() => onNavigate('pyqs')}
+                className="bg-white/10 hover:bg-white/20 text-white font-bold px-6 py-4 rounded-full text-sm backdrop-blur-md border border-white/20 transition cursor-pointer"
+              >
+                📖 Explore PYQs
+              </button>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-amber-50 text-amber-700 rounded-xl">
-              <Award className="h-6 w-6" />
-            </div>
-            <div>
-              <span className="text-2xl font-extrabold text-gray-900 block tracking-tight">{quizzesCount > 0 ? quizzesCount : '30+'}</span>
-              <span className="text-[11px] text-gray-400 font-bold uppercase">Mock Test Series Available</span>
+          {/* Right Column Floating Glass Card */}
+          <div className="lg:col-span-5 flex justify-center">
+            <div className="bg-emerald-950/40 backdrop-blur-md border border-emerald-500/30 p-8 rounded-3xl text-center text-white shadow-2xl w-full max-w-sm space-y-4">
+              <div className="w-20 h-20 bg-emerald-800/50 rounded-full flex items-center justify-center mx-auto text-4xl shadow-inner border border-emerald-400/30">
+                👨‍🎓
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-white">Your Success Journey</h3>
+                <p className="text-xs text-yellow-300 font-bold uppercase tracking-widest mt-1">
+                  Learn • Practice • Improve
+                </p>
+              </div>
+              <p className="text-xs text-emerald-100/90 leading-relaxed font-sans pt-1">
+                CGPSC, व्यापमं व अन्य राज्यस्तरीय प्रतियोगी परीक्षाओं की पूर्ण व गुणवत्तापूर्ण तैयारी।
+              </p>
             </div>
           </div>
+
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-teal-50 text-teal-700 rounded-xl">
-              <Users className="h-6 w-6" />
-            </div>
-            <div>
-              <span className="text-2xl font-extrabold text-gray-900 block tracking-tight">25,000+</span>
-              <span className="text-[11px] text-gray-400 font-bold uppercase">Active Aspirants Nationwide</span>
-            </div>
+        {/* Hero Stats Row inside Banner - Real-Time Dynamic Counts */}
+        <div className="mt-12 pt-8 border-t border-emerald-700/50 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-emerald-950/40 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-4 text-center">
+            <span className="text-2xl sm:text-3xl font-black text-yellow-300 block font-sans">{realQuestionsCount}</span>
+            <span className="text-xs text-emerald-100 font-bold uppercase tracking-wider">Questions</span>
+          </div>
+          <div className="bg-emerald-950/40 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-4 text-center">
+            <span className="text-2xl sm:text-3xl font-black text-yellow-300 block font-sans">{realTopicsCount}</span>
+            <span className="text-xs text-emerald-100 font-bold uppercase tracking-wider">Topics</span>
+          </div>
+          <div className="bg-emerald-950/40 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-4 text-center">
+            <span className="text-2xl sm:text-3xl font-black text-yellow-300 block font-sans">{realExamsCount}</span>
+            <span className="text-xs text-emerald-100 font-bold uppercase tracking-wider">Exams</span>
           </div>
         </div>
       </div>
@@ -148,13 +151,13 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
         <div className="space-y-2 text-center md:text-left">
           <div className="inline-flex items-center gap-2 bg-emerald-800/60 text-emerald-300 text-[11px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
             <GraduationCap className="h-4 w-4" />
-            परीक्षा गाइड व विस्तृत सिलेबस (Exam Info & Syllabus)
+            परीक्षा गाइड व संपूर्ण विवरण (Exam Info)
           </div>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-            CGPSC, व्यापमं व अन्य परीक्षाओं का सम्पूर्ण विवरण व सिलेबस
+            CGPSC, व्यापमं व अन्य परीक्षाओं का सम्पूर्ण विवरण व परीक्षा जानकारी
           </h2>
           <p className="text-xs sm:text-sm text-emerald-100/80 leading-relaxed max-w-2xl font-light">
-            परीक्षा की पात्रता (Eligibility), चयन प्रक्रिया, एग्जाम पैटर्न (Exam Pattern) और डाउनलोड योग्य सिलेबस PDF के लिए समर्पित नया पेज देखें।
+            परीक्षा की पात्रता (Eligibility), चयन प्रक्रिया, एग्जाम पैटर्न (Exam Pattern) और विस्तृत जानकारी के लिए समर्पित नया पेज देखें।
           </p>
         </div>
         <button
@@ -162,7 +165,7 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
           className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold px-6 py-3.5 rounded-xl text-xs transition shadow-md flex items-center gap-2 shrink-0 cursor-pointer"
         >
           <GraduationCap className="h-4 w-4" />
-          समर्पित सिलेबस पेज खोलें
+          Exam Info पेज खोलें
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>

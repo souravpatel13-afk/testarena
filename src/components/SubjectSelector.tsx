@@ -221,32 +221,60 @@ export default function SubjectSelector({ quizzes, questions, onSelectQuiz, onSt
 
                 if (filteredTopics.length === 0) return null;
 
+                const topicThemes = [
+                  { headerBg: 'bg-blue-600', icon: '📘', badgeBg: 'bg-blue-50 text-blue-600 border-blue-100', btnBg: 'bg-blue-600 hover:bg-blue-700 text-white' },
+                  { headerBg: 'bg-emerald-600', icon: '🌿', badgeBg: 'bg-emerald-50 text-emerald-600 border-emerald-100', btnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white' },
+                  { headerBg: 'bg-purple-600', icon: '🧠', badgeBg: 'bg-purple-50 text-purple-600 border-purple-100', btnBg: 'bg-purple-600 hover:bg-purple-700 text-white' },
+                  { headerBg: 'bg-orange-600', icon: '🔥', badgeBg: 'bg-orange-50 text-orange-600 border-orange-100', btnBg: 'bg-orange-600 hover:bg-orange-700 text-white' },
+                  { headerBg: 'bg-pink-600', icon: '🎯', badgeBg: 'bg-pink-50 text-pink-600 border-pink-100', btnBg: 'bg-pink-600 hover:bg-pink-700 text-white' },
+                  { headerBg: 'bg-cyan-600', icon: '💡', badgeBg: 'bg-cyan-50 text-cyan-600 border-cyan-100', btnBg: 'bg-cyan-600 hover:bg-cyan-700 text-white' }
+                ];
+
                 return (
-                  <div key={sIdx} className="space-y-4">
-                    <h3 className="text-sm font-bold text-gray-800 border-l-4 border-emerald-600 pl-3 uppercase tracking-wide">
-                      {subjectName}
-                    </h3>
+                  <div key={sIdx} className="space-y-5">
+                    <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                      <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+                        {subjectName}
+                      </h3>
+                      <span className="text-xs text-gray-400 font-bold">{filteredTopics.length} Topics</span>
+                    </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {filteredTopics.map(([topicName, qIds], tIdx) => (
-                        <div 
-                          key={tIdx} 
-                          className="bg-white p-4 rounded-2xl border border-gray-100 hover:border-emerald-200 transition-all flex items-center justify-between shadow-sm group hover:shadow-md"
-                        >
-                          <div className="space-y-1 pr-2">
-                            <h4 className="text-xs font-bold text-gray-800 group-hover:text-emerald-800 transition line-clamp-1">{topicName}</h4>
-                            <p className="text-[10px] text-gray-400 font-bold font-sans">{qIds.length} Practice MCQs</p>
-                          </div>
-                          
-                          <button
-                            onClick={() => handleStartTopicwiseQuiz(subjectName, topicName, qIds)}
-                            className="p-2.5 bg-emerald-50 hover:bg-emerald-700 hover:text-white text-emerald-800 rounded-xl transition cursor-pointer"
-                            title="Start Topic Quiz"
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {filteredTopics.map(([topicName, qIds], tIdx) => {
+                        const theme = topicThemes[tIdx % topicThemes.length];
+                        return (
+                          <div 
+                            key={tIdx} 
+                            className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between"
                           >
-                            <Play className="h-4 w-4 fill-current" />
-                          </button>
-                        </div>
-                      ))}
+                            {/* Colored Top Header Banner */}
+                            <div className={`${theme.headerBg} p-6 text-white space-y-3 relative`}>
+                              <div className="text-2xl">{theme.icon}</div>
+                              <h4 className="text-xl font-extrabold tracking-tight text-white line-clamp-1">{topicName}</h4>
+                            </div>
+
+                            {/* Card Content Body */}
+                            <div className="p-6 space-y-5 flex-1 flex flex-col justify-between">
+                              <div className="space-y-3">
+                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${theme.badgeBg}`}>
+                                  📄 {qIds.length} Questions
+                                </span>
+                                <p className="text-xs text-gray-500 leading-relaxed font-sans">
+                                  Practice all questions from <strong className="text-gray-800">{topicName}</strong> and improve your score.
+                                </p>
+                              </div>
+
+                              <button
+                                onClick={() => handleStartTopicwiseQuiz(subjectName, topicName, qIds)}
+                                className={`w-full py-3 px-4 font-bold rounded-2xl transition-all duration-200 text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer ${theme.btnBg}`}
+                              >
+                                <Play className="h-3.5 w-3.5 fill-current" /> Start Practice
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );

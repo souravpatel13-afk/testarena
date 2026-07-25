@@ -1,18 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   Download, 
   BookOpen, 
   CheckCircle2, 
   Award, 
-  Calendar, 
   ExternalLink, 
   Search, 
   GraduationCap, 
   HelpCircle, 
   ChevronRight,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Star
 } from 'lucide-react';
 import { ExamInfo } from '../types';
 
@@ -24,6 +24,12 @@ interface AboutExamProps {
 export default function AboutExam({ exams, onNavigateToPractice }: AboutExamProps) {
   const [selectedExamId, setSelectedExamId] = useState<string>(exams[0]?.id || '');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if ((!selectedExamId || !exams.some(e => e.id === selectedExamId)) && exams.length > 0) {
+      setSelectedExamId(exams[0].id);
+    }
+  }, [exams, selectedExamId]);
 
   const filteredExams = exams.filter(exam => 
     exam.examName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -51,11 +57,11 @@ export default function AboutExam({ exams, onNavigateToPractice }: AboutExamProp
         <div className="relative space-y-3 max-w-3xl">
           <div className="flex items-center gap-2">
             <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-emerald-400" /> परीक्षा मार्गदर्शन व सिलेबस पोर्टल
+              <Sparkles className="h-3.5 w-3.5 text-emerald-400" /> परीक्षा मार्गदर्शन व Exam Info
             </span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-            प्रतियोगी परीक्षाओं की संपूर्ण जानकारी व नवीनतम सिलेबस
+            प्रतियोगी परीक्षाओं की संपूर्ण जानकारी व एग्जाम गाइड
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-light">
             छत्तीसगढ़ लोक सेवा आयोग (CGPSC), व्यापमं (Vyapam), शिक्षक भर्ती व अन्य प्रतियोगी परीक्षाओं का सटीक एग्जाम पैटर्न, चयन प्रक्रिया, विस्तृत पाठ्यक्रम तथा आधिकारिक सिलेबस PDF यहाँ देखें।
@@ -66,21 +72,26 @@ export default function AboutExam({ exams, onNavigateToPractice }: AboutExamProp
       {/* Exam Selection Pills & Search Bar */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
-          {/* Exam Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-            {exams.map(exam => {
+          {/* Exam Pills - Wrapped for clean view on mobile without dragging */}
+          <div className="flex flex-wrap items-center gap-2">
+            {exams.map((exam, idx) => {
               const isSelected = selectedExam?.id === exam.id;
+              const isDefault = idx === 0;
               return (
                 <button
                   key={exam.id}
                   onClick={() => setSelectedExamId(exam.id)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 shrink-0 ${
+                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
                     isSelected 
-                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' 
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 ring-2 ring-emerald-600/30' 
                       : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200/80'
                   }`}
                 >
-                  <BookOpen className={`h-3.5 w-3.5 ${isSelected ? 'text-white' : 'text-emerald-600'}`} />
+                  {isDefault ? (
+                    <Star className={`h-3.5 w-3.5 ${isSelected ? 'text-amber-300 fill-amber-300' : 'text-amber-500 fill-amber-500'}`} />
+                  ) : (
+                    <BookOpen className={`h-3.5 w-3.5 ${isSelected ? 'text-white' : 'text-emerald-600'}`} />
+                  )}
                   {exam.examName}
                 </button>
               );
@@ -106,33 +117,24 @@ export default function AboutExam({ exams, onNavigateToPractice }: AboutExamProp
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden space-y-0">
           
           {/* Exam Card Header */}
-          <div className="p-6 sm:p-8 bg-gradient-to-b from-emerald-50/60 to-white border-b border-gray-100 space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">
-                    {selectedExam.category || 'Competitive Exam'}
-                  </span>
-                  <span className="text-[11px] text-gray-400 font-medium flex items-center gap-1">
-                    <Calendar className="h-3 w-3" /> अपडेटेड: {selectedExam.updatedAt ? new Date(selectedExam.updatedAt).toLocaleDateString('hi-IN') : '2026'}
-                  </span>
-                </div>
-                <h3 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
-                  {selectedExam.examName}
-                </h3>
+          <div className="p-4 sm:p-5 bg-gradient-to-b from-emerald-50/60 to-white border-b border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {selectedExam.shortTagline ? (
                 <p className="text-xs sm:text-sm text-gray-600 font-medium">
                   {selectedExam.shortTagline}
                 </p>
-              </div>
+              ) : (
+                <div></div>
+              )}
 
               {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0 sm:ml-auto">
                 {selectedExam.pdfUrl && (
                   <a
                     href={selectedExam.pdfUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="bg-red-500 hover:bg-red-600 text-white font-extrabold px-4 py-2.5 rounded-xl text-xs transition-all flex items-center gap-2 shadow-sm hover:shadow"
+                    className="bg-red-500 hover:bg-red-600 text-white font-extrabold px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-2 shadow-sm hover:shadow"
                   >
                     <Download className="h-4 w-4" /> सिलेबस PDF <ExternalLink className="h-3 w-3 opacity-70" />
                   </a>
@@ -141,18 +143,17 @@ export default function AboutExam({ exams, onNavigateToPractice }: AboutExamProp
                 {onNavigateToPractice && (
                   <button
                     onClick={() => onNavigateToPractice(selectedExam.examName)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2.5 rounded-xl text-xs transition-all flex items-center gap-2 shadow-sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-2 shadow-sm"
                   >
                     टेस्ट हल करें <ArrowRight className="h-4 w-4" />
                   </button>
                 )}
               </div>
             </div>
-
           </div>
 
           {/* Document Content Panel */}
-          <div className="p-6 sm:p-8 space-y-6">
+          <div className="p-4 sm:p-6 space-y-4">
             <div className="bg-white border border-gray-200/90 rounded-3xl p-6 sm:p-10 shadow-xs max-w-none font-sans leading-relaxed text-gray-800 space-y-4">
               {selectedExam.richContent ? (
                 <div 
@@ -178,46 +179,6 @@ export default function AboutExam({ exams, onNavigateToPractice }: AboutExamProp
 
         </div>
       )}
-
-      {/* Grid of Other Exams for Quick Jump */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
-          <BookOpen className="h-4 w-4 text-emerald-600" /> अन्य प्रतियोगी परीक्षाएं (Explore All Exams)
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {exams.map(e => (
-            <div
-              key={e.id}
-              onClick={() => {
-                setSelectedExamId(e.id);
-                window.scrollTo({ top: document.getElementById('about-exam-section')?.offsetTop || 0, behavior: 'smooth' });
-              }}
-              className={`p-4 rounded-2xl border cursor-pointer transition-all duration-200 group flex flex-col justify-between space-y-3 ${
-                selectedExam?.id === e.id 
-                  ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-500/20' 
-                  : 'bg-white border-gray-100 hover:border-emerald-200 hover:shadow-sm'
-              }`}
-            >
-              <div className="space-y-1">
-                <span className="text-[10px] text-emerald-700 font-extrabold uppercase bg-emerald-100/80 px-2 py-0.5 rounded">
-                  {e.category}
-                </span>
-                <h4 className="text-xs font-black text-gray-900 group-hover:text-emerald-700 transition-colors">
-                  {e.examName}
-                </h4>
-                <p className="text-[11px] text-gray-500 line-clamp-2 leading-relaxed">
-                  {e.shortTagline}
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-gray-100/80 text-[11px] font-bold text-emerald-700">
-                <span>विस्तार से देखें</span>
-                <ChevronRight className="h-3.5 w-3.5 transform group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
     </div>
   );

@@ -172,7 +172,7 @@ export default function App() {
   // Header Nav Lists
   const allNavigationItems = [
     { id: 'home', label: 'Home', icon: HomeIcon },
-    { id: 'exam-info', label: 'Exam Info & Syllabus', icon: GraduationCap },
+    { id: 'exam-info', label: 'Exam Info', icon: GraduationCap },
     { id: 'pyqs', label: 'PYQs Practice', icon: History },
     { id: 'subjects', label: 'Subject Tests', icon: BookOpen },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -354,6 +354,7 @@ export default function App() {
                 questionsCount={questions.length}
                 quizzesCount={quizzes.length}
                 exams={exams}
+                questions={questions}
               />
             )}
 

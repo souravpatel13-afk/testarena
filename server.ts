@@ -543,31 +543,83 @@ function processParsedRows(rawJsonRows: any[], sheetType: string, action: string
 
   // Question parsing for PYQ or Subject
   const parsedQuestions = rawJsonRows.map((r, idx) => {
-    const textHi = r['Question (HI)'] || r['Question'] || r['Question (Hindi)'] || r['question_hi'] || r['text_hi'] || r['प्रश्न'] || r['प्रश्न (हिन्दी)'] || '';
-    const textEn = r['Question (EN)'] || r['Question (English)'] || r['question_en'] || r['text_en'] || r['प्रश्न (अंग्रेजी)'] || '';
+    const cleanStr = (val: any) => {
+      if (val === undefined || val === null) return '';
+      return String(val).replace(/\u00a0/g, ' ').trim();
+    };
 
-    const optA = r['Option A'] || r['Option A (HI)'] || r['Option 1'] || r['option_a'] || r['विकल्प A'] || r['विकल्प 1'] || '';
-    const optB = r['Option B'] || r['Option B (HI)'] || r['Option 2'] || r['option_b'] || r['विकल्प B'] || r['विकल्प 2'] || '';
-    const optC = r['Option C'] || r['Option C (HI)'] || r['Option 3'] || r['option_c'] || r['विकल्प C'] || r['विकल्प 3'] || '';
-    const optD = r['Option D'] || r['Option D (HI)'] || r['Option 4'] || r['option_d'] || r['विकल्प D'] || r['विकल्प 4'] || '';
+    const getVal = (patterns: (string | RegExp)[]) => {
+      const keys = Object.keys(r);
+      for (const pat of patterns) {
+        for (const k of keys) {
+          const val = cleanStr(r[k]);
+          if (!val) continue;
 
-    const opts = [optA, optB, optC, optD].map(o => String(o || '').trim());
-    const options_hi = opts.filter(Boolean).length >= 2 ? opts : ['विकल्प A', 'विकल्प B', 'विकल्प C', 'विकल्प D'];
+          const keyTrim = k.replace(/\u00a0/g, ' ').trim();
+          const keyNorm = keyTrim.toLowerCase().replace(/[\s\-_()]/g, '');
 
-    const ansRaw = r['Correct Answer'] || r['Answer'] || r['correct_answer'] || r['उत्तर'] || r['सही उत्तर'] || '0';
+          if (typeof pat === 'string') {
+            const patNorm = pat.toLowerCase().replace(/[\s\-_()]/g, '');
+            if (keyNorm === patNorm || keyTrim === pat) {
+              return val;
+            }
+          } else if (pat.test(keyTrim) || pat.test(keyNorm)) {
+            return val;
+          }
+        }
+      }
+      return '';
+    };
+
+    const textHi = getVal([
+      'text_hi', 'question_hi', 'Question (HI)', 'Question', 'Question (Hindi)', 'text', 'प्रश्न', 'प्रश्न (हिन्दी)', /^text_hi$/i, /^question_hi$/i
+    ]);
+    const textEn = getVal([
+      'text_en', 'question_en', 'Question (EN)', 'Question (English)', 'प्रश्न (अंग्रेजी)', /^text_en$/i, /^question_en$/i
+    ]);
+
+    const opt1 = getVal([
+      'option_hi_1', 'option_hi_a', 'option_1', 'option_a', 'option1', 'optiona',
+      'Option A', 'Option A (HI)', 'Option 1', 'OptionA', 'विकल्प A', 'विकल्प 1',
+      'A', 'a', '(A)', '(a)', 'Ans A', 'ans_a', /^option_hi_1$/i, /^option_1$/i, /^option_a$/i
+    ]);
+    const opt2 = getVal([
+      'option_hi_2', 'option_hi_b', 'option_2', 'option_b', 'option2', 'optionb',
+      'Option B', 'Option B (HI)', 'Option 2', 'OptionB', 'विकल्प B', 'विकल्प 2',
+      'B', 'b', '(B)', '(b)', 'Ans B', 'ans_b', /^option_hi_2$/i, /^option_2$/i, /^option_b$/i
+    ]);
+    const opt3 = getVal([
+      'option_hi_3', 'option_hi_c', 'option_3', 'option_c', 'option3', 'optionc',
+      'Option C', 'Option C (HI)', 'Option 3', 'OptionC', 'विकल्प C', 'विकल्प 3',
+      'C', 'c', '(C)', '(c)', 'Ans C', 'ans_c', /^option_hi_3$/i, /^option_3$/i, /^option_c$/i
+    ]);
+    const opt4 = getVal([
+      'option_hi_4', 'option_hi_d', 'option_4', 'option_d', 'option4', 'optiond',
+      'Option D', 'Option D (HI)', 'Option 4', 'OptionD', 'विकल्प D', 'विकल्प 4',
+      'D', 'd', '(D)', '(d)', 'Ans D', 'ans_d', /^option_hi_4$/i, /^option_4$/i, /^option_d$/i
+    ]);
+    const opt5 = getVal([
+      'option_hi_5', 'option_hi_e', 'option_5', 'option_e', 'option5', 'optione',
+      'Option E', 'Option E (HI)', 'Option 5', 'OptionE', 'विकल्प E', 'विकल्प 5',
+      'E', 'e', '(E)', '(e)', 'Ans E', 'ans_e', /^option_hi_5$/i, /^option_5$/i, /^option_e$/i
+    ]);
+
+    const options_hi = [opt1, opt2, opt3, opt4, opt5].filter(Boolean);
+
+    const ansRaw = getVal(['correctAnswer', 'Correct Answer', 'Answer', 'correct_answer', 'CorrectAnswer', 'उत्तर', 'सही उत्तर']) || '1';
     const correctAnswer = parseCorrectAnswerServer(ansRaw, options_hi);
 
     let defaultSub = 'Chhattisgarh General Knowledge';
     if (sheetType === 'subject') defaultSub = 'Chhattisgarh General Knowledge';
 
-    const subject = r['Subject'] || r['subject'] || r['विषय'] || defaultSub;
-    const topic = r['Topic'] || r['topic'] || r['विषय-वस्तु'] || r['टॉपिक'] || 'सामान्य परिचय';
-    const exam = r['Exam'] || r['exam'] || r['परीक्षा'] || (sheetType === 'pyq' ? 'CGPSC Prelims' : '');
-    const yearRaw = r['Year'] || r['year'] || r['वर्ष'];
+    const subject = getVal(['subject', 'Subject', 'विषय']) || defaultSub;
+    const topic = getVal(['topic', 'Topic', 'विषय-वस्तु', 'टॉपिक']) || 'सामान्य परिचय';
+    const exam = getVal(['exam', 'Exam', 'परीक्षा']) || (sheetType === 'pyq' ? 'CGPSC Prelims' : '');
+    const yearRaw = getVal(['year', 'Year', 'वर्ष']);
     const year = yearRaw ? parseInt(String(yearRaw)) : undefined;
 
-    const explanation_hi = r['Explanation (HI)'] || r['Explanation'] || r['explanation_hi'] || r['व्याख्या'] || r['व्याख्या (हिन्दी)'] || '';
-    const explanation_en = r['Explanation (EN)'] || r['explanation_en'] || r['व्याख्या (अंग्रेजी)'] || '';
+    const explanation_hi = getVal(['explanation_hi', 'Explanation (HI)', 'Explanation', 'व्याख्या', 'व्याख्या (हिन्दी)']);
+    const explanation_en = getVal(['explanation_en', 'Explanation (EN)', 'व्याख्या (अंग्रेजी)']);
 
     return {
       id: `q-sheet-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
@@ -1105,6 +1157,17 @@ app.delete('/api/exam-info/:id', (req, res) => {
   db.examInfo = db.examInfo.filter((item: any) => item.id !== id);
   saveDatabase(db);
   res.json({ message: "Exam info deleted successfully", id });
+});
+
+app.put('/api/exam-info-reorder', (req, res) => {
+  const db = loadDatabase();
+  const newExamsList = req.body;
+  if (!Array.isArray(newExamsList)) {
+    return res.status(400).json({ error: "Request body must be an array of exams" });
+  }
+  db.examInfo = newExamsList;
+  saveDatabase(db);
+  res.json({ message: "Exam sequence reordered successfully", count: newExamsList.length });
 });
 
 // SEO Route: robots.txt
