@@ -230,10 +230,12 @@ export default function App() {
           <div className="hidden md:flex items-center gap-3 pl-4 border-l border-slate-800">
             <div className="text-right">
               <span className="text-xs font-bold text-white block leading-none">
-                {fbUser?.displayName || (isAdmin ? "Sourav Patel" : (currentUser?.name || "Student"))}
+                {isAdmin 
+                  ? "Sourav Patel" 
+                  : (fbUser ? (fbUser.displayName || fbUser.email?.split('@')[0] || "Student") : "Aspirant")}
               </span>
               <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-0.5 justify-end mt-0.5 font-sans">
-                <span className={`w-1.5 h-1.5 rounded-full ${isAdmin ? 'bg-emerald-400' : 'bg-blue-400'}`}></span> {isAdmin ? "Admin" : "Student"}
+                <span className={`w-1.5 h-1.5 rounded-full ${isAdmin ? 'bg-emerald-400' : 'bg-blue-400'}`}></span> {isAdmin ? "Admin" : (fbUser ? "Student" : "Candidate")}
               </span>
             </div>
             <div className="p-2 bg-slate-800 text-emerald-400 rounded-full border border-slate-700">
@@ -294,14 +296,18 @@ export default function App() {
             <div className="border-t border-slate-800 pt-3 pb-1 px-4 flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-white block">
-                  {fbUser?.displayName || (isAdmin ? "Sourav Patel" : (currentUser?.name || "Student"))}
+                  {isAdmin 
+                    ? "Sourav Patel" 
+                    : (fbUser ? (fbUser.displayName || fbUser.email?.split('@')[0] || "Student") : "Aspirant")}
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
-                  {fbUser?.email || (isAdmin ? "souravpatel13@gmail.com" : "student@testarena.co.in")}
+                  {isAdmin 
+                    ? "souravpatel13@gmail.com" 
+                    : (fbUser?.email || "TestArena Candidate")}
                 </span>
               </div>
               <span className="text-[10px] bg-slate-800 text-emerald-400 px-2 py-0.5 rounded-md font-bold">
-                {isAdmin ? "Admin" : "Student"}
+                {isAdmin ? "Admin" : (fbUser ? "Student" : "Candidate")}
               </span>
             </div>
           </div>

@@ -348,6 +348,15 @@ function loadDatabase() {
         db.examInfo = initialExamInfo;
         dirty = true;
       }
+      if (!db.user || db.user.name === "Sourav Patel") {
+        db.user = {
+          id: "guest-user",
+          name: "Aspirant",
+          email: "aspirant@testarena.co.in",
+          role: "aspirant"
+        };
+        dirty = true;
+      }
       if (dirty) {
         saveDatabase(db);
       }
@@ -365,10 +374,10 @@ function loadDatabase() {
     currentAffairs: initialCurrentAffairs,
     examInfo: initialExamInfo,
     user: {
-      id: "user-sourav",
-      name: "Sourav Patel",
-      email: "souravpatel13@gmail.com",
-      role: "admin" // Give admin privileges by default so user can test both sides!
+      id: "guest-user",
+      name: "Aspirant",
+      email: "aspirant@testarena.co.in",
+      role: "aspirant"
     }
   };
   saveDatabase(defaultDb);
@@ -821,7 +830,7 @@ app.post('/api/attempts', (req, res) => {
 // Get User Profile
 app.get('/api/user', (req, res) => {
   const db = loadDatabase();
-  res.json(db.user || { id: "user-sourav", name: "Sourav Patel", email: "souravpatel13@gmail.com", role: "admin" });
+  res.json(db.user || { id: "guest-user", name: "Aspirant", email: "aspirant@testarena.co.in", role: "aspirant" });
 });
 
 // Update User Profile
