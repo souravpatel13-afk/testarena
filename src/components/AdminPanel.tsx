@@ -990,7 +990,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
         <div>
           <h2 className="text-base font-extrabold text-gray-900">प्रशासकीय लॉगिन (Admin Login Required)</h2>
           <p className="text-xs text-gray-500 font-medium mt-1 leading-relaxed">
-            यह नियंत्रण कक्ष केवल अधिकृत प्रशासक (<span className="font-bold text-emerald-700">{ADMIN_EMAIL}</span>) के लिए सुरक्षित है।
+            यह नियंत्रण कक्ष केवल अधिकृत प्रशासक (Authorized Admin) के लिए सुरक्षित है।
           </p>
         </div>
         <button
@@ -1016,7 +1016,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
             आप <span className="font-bold text-gray-900">{user.email}</span> के रूप में लॉग-इन हैं।
           </p>
           <p className="text-xs text-red-600 font-semibold mt-1">
-            केवल प्रशासक खाता (<span className="underline font-bold">{ADMIN_EMAIL}</span>) ही Admin Panel का उपयोग कर सकता है।
+            केवल अधिकृत प्रशासक खाता ही Admin Panel का उपयोग कर सकता है।
           </p>
         </div>
         <button

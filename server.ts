@@ -338,29 +338,31 @@ function loadDatabase() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf8');
-      const db = JSON.parse(data);
-      let dirty = false;
-      if (!db.currentAffairs) {
-        db.currentAffairs = initialCurrentAffairs;
-        dirty = true;
+      if (data && data.trim()) {
+        const db = JSON.parse(data);
+        let dirty = false;
+        if (!db.currentAffairs) {
+          db.currentAffairs = initialCurrentAffairs;
+          dirty = true;
+        }
+        if (!db.examInfo) {
+          db.examInfo = initialExamInfo;
+          dirty = true;
+        }
+        if (!db.user || db.user.name === "Sourav Patel") {
+          db.user = {
+            id: "guest-user",
+            name: "Aspirant",
+            email: "aspirant@testarena.co.in",
+            role: "aspirant"
+          };
+          dirty = true;
+        }
+        if (dirty) {
+          saveDatabase(db);
+        }
+        return db;
       }
-      if (!db.examInfo) {
-        db.examInfo = initialExamInfo;
-        dirty = true;
-      }
-      if (!db.user || db.user.name === "Sourav Patel") {
-        db.user = {
-          id: "guest-user",
-          name: "Aspirant",
-          email: "aspirant@testarena.co.in",
-          role: "aspirant"
-        };
-        dirty = true;
-      }
-      if (dirty) {
-        saveDatabase(db);
-      }
-      return db;
     }
   } catch (error) {
     console.error("Error reading database file, using defaults:", error);
@@ -1286,7 +1288,7 @@ async function startServer() {
   const isProduction = process.env.NODE_ENV === "production" || hasDist;
 
   if (!isProduction) {
-    const { createServer: createViteServer } = await import('vite');
+    const { createServer: createViteServer } = require('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

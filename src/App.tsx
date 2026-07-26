@@ -181,8 +181,8 @@ export default function App() {
     { id: 'admin', label: 'Admin Panel', icon: Settings },
   ] as const;
 
-  // Only render Admin Panel in header nav if authorized as souravpatel13@gmail.com
-  const navigationItems = allNavigationItems.filter(item => item.id !== 'admin' || isAdmin);
+  // Header Nav Lists - Always include Admin Panel tab so admin can access login at all times
+  const navigationItems = allNavigationItems;
 
   return (
     <div className="min-h-screen bg-emerald-50/30 flex flex-col font-sans text-gray-800">
@@ -226,31 +226,43 @@ export default function App() {
             })}
           </nav>
 
-          {/* User badge identity details */}
+          {/* User badge identity details & Admin Login Button */}
           <div className="hidden md:flex items-center gap-3 pl-4 border-l border-slate-800">
-            <div className="text-right">
-              <span className="text-xs font-bold text-white block leading-none">
-                {isAdmin 
-                  ? "Sourav Patel" 
-                  : (fbUser ? (fbUser.displayName || fbUser.email?.split('@')[0] || "Student") : "Aspirant")}
-              </span>
-              <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-0.5 justify-end mt-0.5 font-sans">
-                <span className={`w-1.5 h-1.5 rounded-full ${isAdmin ? 'bg-emerald-400' : 'bg-blue-400'}`}></span> {isAdmin ? "Admin" : (fbUser ? "Student" : "Candidate")}
-              </span>
-            </div>
-            <div className="p-2 bg-slate-800 text-emerald-400 rounded-full border border-slate-700">
-              <UserIcon className="h-4 w-4" />
-            </div>
-            {fbUser && (
+            {fbUser ? (
+              <>
+                <div className="text-right">
+                  <span className="text-xs font-bold text-white block leading-none">
+                    {isAdmin 
+                      ? "Sourav Patel" 
+                      : (fbUser.displayName || fbUser.email?.split('@')[0] || "Student")}
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-0.5 justify-end mt-0.5 font-sans">
+                    <span className={`w-1.5 h-1.5 rounded-full ${isAdmin ? 'bg-emerald-400' : 'bg-blue-400'}`}></span> {isAdmin ? "Admin" : "Student"}
+                  </span>
+                </div>
+                <div className="p-2 bg-slate-800 text-emerald-400 rounded-full border border-slate-700">
+                  <UserIcon className="h-4 w-4" />
+                </div>
+                <button
+                  onClick={async () => {
+                    await logout();
+                    if (activeTab === 'admin') setActiveTab('home');
+                  }}
+                  title="Log out"
+                  className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
               <button
-                onClick={async () => {
-                  await logout();
-                  if (activeTab === 'admin') setActiveTab('home');
+                onClick={() => {
+                  setActiveTab('admin');
+                  setIsQuizRunning(false);
                 }}
-                title="Log out"
-                className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition shadow-xs cursor-pointer"
               >
-                <LogOut className="h-4 w-4" />
+                <Settings className="h-3.5 w-3.5" /> Admin Login
               </button>
             )}
           </div>
@@ -302,7 +314,7 @@ export default function App() {
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
                   {isAdmin 
-                    ? "souravpatel13@gmail.com" 
+                    ? "Admin Account" 
                     : (fbUser?.email || "TestArena Candidate")}
                 </span>
               </div>
@@ -473,6 +485,12 @@ export default function App() {
                 className="flex items-center gap-2 text-slate-400 hover:text-white transition text-xs md:text-sm text-left font-semibold w-fit"
               >
                 <span className="text-base select-none">📊</span> Dashboard
+              </button>
+              <button 
+                onClick={() => handleFooterNav('admin')}
+                className="flex items-center gap-2 text-slate-400 hover:text-white transition text-xs md:text-sm text-left font-semibold w-fit"
+              >
+                <span className="text-base select-none">⚙️</span> Admin Panel / Login
               </button>
               <button 
                 onClick={() => handleFooterNav('privacy')}
