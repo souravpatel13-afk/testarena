@@ -335,8 +335,10 @@ const initialExamInfo = [
 
 // Database Loader / Saver Helpers
 function loadDatabase() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
+  const BACKUP_FILE = path.join(DATA_DIR, 'db.json.bak');
+
+  if (fs.existsSync(DB_FILE)) {
+    try {
       const data = fs.readFileSync(DB_FILE, 'utf8');
       if (data && data.trim()) {
         const db = JSON.parse(data);
@@ -363,9 +365,22 @@ function loadDatabase() {
         }
         return db;
       }
+    } catch (error) {
+      console.error("Error reading primary database file:", error);
+      if (fs.existsSync(BACKUP_FILE)) {
+        try {
+          const bakData = fs.readFileSync(BACKUP_FILE, 'utf8');
+          if (bakData && bakData.trim()) {
+            const db = JSON.parse(bakData);
+            console.log("Successfully restored database from backup file.");
+            saveDatabase(db);
+            return db;
+          }
+        } catch (bakError) {
+          console.error("Error reading backup database file:", bakError);
+        }
+      }
     }
-  } catch (error) {
-    console.error("Error reading database file, using defaults:", error);
   }
 
   // Seeding default database
@@ -388,7 +403,24 @@ function loadDatabase() {
 
 function saveDatabase(data: any) {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+    const TEMP_FILE = path.join(DATA_DIR, 'db.json.tmp');
+    const BACKUP_FILE = path.join(DATA_DIR, 'db.json.bak');
+    const jsonString = JSON.stringify(data, null, 2);
+
+    // Write to temporary file first
+    fs.writeFileSync(TEMP_FILE, jsonString, 'utf8');
+
+    // Create a backup of existing valid db before replacing
+    if (fs.existsSync(DB_FILE)) {
+      try {
+        fs.copyFileSync(DB_FILE, BACKUP_FILE);
+      } catch (copyErr) {
+        // Non-critical if backup copy fails
+      }
+    }
+
+    // Atomic replace temp file -> main db file
+    fs.renameSync(TEMP_FILE, DB_FILE);
     return true;
   } catch (error) {
     console.error("Error writing database file:", error);
@@ -450,7 +482,7 @@ app.post('/api/questions/replace', (req, res) => {
 // Get settings
 app.get('/api/settings', (req, res) => {
   const db = loadDatabase();
-  res.json(db.settings || { spreadsheetId: "", spreadsheetIdPyq: "", spreadsheetIdSubject: "", spreadsheetIdCurrentAffairs: "" });
+  res.json(db.settings || { spreadsheetId: "", spreadsheetIdPyq: "", spreadsheetIdSubject: "", spreadsheetIdCurrentAffairs: "", adminPasscode: "Kitkatisbest" });
 });
 
 // Update settings
@@ -459,6 +491,19 @@ app.post('/api/settings', (req, res) => {
   db.settings = { ...db.settings, ...req.body };
   saveDatabase(db);
   res.json(db.settings);
+});
+
+// Verify Admin Passcode for login on custom domains (e.g., testarena.co.in)
+app.post('/api/admin/verify-passcode', (req, res) => {
+  const { passcode } = req.body;
+  const db = loadDatabase();
+  const currentPasscode = (db.settings && db.settings.adminPasscode) || "Kitkatisbest";
+
+  if (passcode && passcode.trim() === currentPasscode.trim()) {
+    return res.json({ success: true, message: "लॉगिन सफल!", email: "souravpatel13@gmail.com" });
+  } else {
+    return res.status(401).json({ success: false, error: "गलत पासकोड (Incorrect Passcode)! कृपया सही एडमिन पासवर्ड दर्ज करें।" });
+  }
 });
 
 function parseCorrectAnswerServer(rawVal: any, options: string[]): number {

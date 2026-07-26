@@ -92,6 +92,14 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [token, setToken] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  // Passcode Auth state for custom domain support
+  const [passcodeInput, setPasscodeInput] = useState('');
+  const [passcodeError, setPasscodeError] = useState<string | null>(null);
+  const [isPasscodeAdmin, setIsPasscodeAdmin] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && localStorage.getItem('admin_passcode_authed') === 'true';
+  });
+  const [passcodeVerifying, setPasscodeVerifying] = useState(false);
+
   // Sheet configuration state for three separate sheets
   const [spreadsheetIdPyq, setSpreadsheetIdPyq] = useState<string>('');
   const [spreadsheetIdSubject, setSpreadsheetIdSubject] = useState<string>('');
@@ -917,6 +925,33 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     }
   };
 
+  const handlePasscodeLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passcodeInput.trim()) return;
+    setPasscodeVerifying(true);
+    setPasscodeError(null);
+    try {
+      const res = await fetch('/api/admin/verify-passcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passcode: passcodeInput.trim() })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsPasscodeAdmin(true);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('admin_passcode_authed', 'true');
+        }
+      } else {
+        setPasscodeError(data.error || "गलत पासकोड!");
+      }
+    } catch (err: any) {
+      setPasscodeError("सर्वर त्रुटि: " + (err.message || String(err)));
+    } finally {
+      setPasscodeVerifying(false);
+    }
+  };
+
   const handleLogin = async () => {
     setAuthLoading(true);
     try {
@@ -940,6 +975,10 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
       await logout();
       setUser(null);
       setToken(null);
+      setIsPasscodeAdmin(false);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('admin_passcode_authed');
+      }
     } catch (err: any) {
       console.error("Logout error:", err);
     } finally {
@@ -970,7 +1009,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   );
 
   const ADMIN_EMAIL = 'souravpatel13@gmail.com';
-  const isAuthorizedAdmin = user && user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const isAuthorizedAdmin = isPasscodeAdmin || (user && user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase());
 
   if (authLoading) {
     return (
@@ -981,50 +1020,77 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     );
   }
 
-  if (!user) {
+  if (!isAuthorizedAdmin) {
     return (
-      <div className="max-w-md mx-auto my-12 bg-white border border-gray-200 rounded-2xl p-8 shadow-sm text-center space-y-5">
+      <div className="max-w-md mx-auto my-12 bg-white border border-gray-200 rounded-2xl p-8 shadow-sm text-center space-y-6">
         <div className="w-14 h-14 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto border border-emerald-200">
           <Lock className="h-7 w-7" />
         </div>
+        
         <div>
-          <h2 className="text-base font-extrabold text-gray-900">प्रशासकीय लॉगिन (Admin Login Required)</h2>
+          <h2 className="text-base font-extrabold text-gray-900">प्रशासकीय लॉगिन (Admin Panel Access)</h2>
           <p className="text-xs text-gray-500 font-medium mt-1 leading-relaxed">
-            यह नियंत्रण कक्ष केवल अधिकृत प्रशासक (Authorized Admin) के लिए सुरक्षित है।
+            सुरक्षा के लिए पासकोड या गूगल खाते से लॉगिन करें।
           </p>
         </div>
-        <button
-          onClick={handleLogin}
-          disabled={authLoading}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-        >
-          <Lock className="h-4 w-4" /> Google से लॉगिन करें
-        </button>
-      </div>
-    );
-  }
 
-  if (!isAuthorizedAdmin) {
-    return (
-      <div className="max-w-md mx-auto my-12 bg-white border border-red-200 rounded-2xl p-8 shadow-sm text-center space-y-5">
-        <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto border border-red-200">
-          <AlertCircle className="h-7 w-7" />
+        {/* Option 1: Passcode Login (Recommended for testarena.co.in custom domain) */}
+        <form onSubmit={handlePasscodeLogin} className="space-y-3 text-left border-t border-b border-gray-100 py-5">
+          <label className="block text-xs font-bold text-gray-800">
+            🔐 एडमिन पासकोड / सिक्योरिटी पिन (Admin PIN)
+          </label>
+          <div className="relative">
+            <input
+              type="password"
+              value={passcodeInput}
+              onChange={(e) => setPasscodeInput(e.target.value)}
+              placeholder="एडमिन पासकोड दर्ज करें..."
+              className="w-full text-xs bg-gray-50 border border-gray-300 rounded-xl px-3.5 py-2.5 focus:bg-white focus:border-emerald-500 focus:outline-hidden font-mono"
+            />
+          </div>
+
+          {passcodeError && (
+            <p className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 p-2.5 rounded-lg">
+              ⚠️ {passcodeError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={passcodeVerifying || !passcodeInput.trim()}
+            className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+          >
+            {passcodeVerifying ? "सत्यापित हो रहा है..." : "पासकोड से लॉगिन करें (Log In)"}
+          </button>
+        </form>
+
+        {/* Option 2: Google Sign-In */}
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">या (OR)</p>
+          <button
+            type="button"
+            onClick={handleLogin}
+            disabled={authLoading}
+            className="w-full bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-2xs cursor-pointer"
+          >
+            <Lock className="h-4 w-4 text-emerald-600" /> Google खाते से लॉगिन करें
+          </button>
         </div>
-        <div>
-          <h2 className="text-base font-extrabold text-gray-900">अनुमति नहीं है (Access Restricted)</h2>
-          <p className="text-xs text-gray-600 font-medium mt-2 leading-relaxed">
-            आप <span className="font-bold text-gray-900">{user.email}</span> के रूप में लॉग-इन हैं।
-          </p>
-          <p className="text-xs text-red-600 font-semibold mt-1">
-            केवल अधिकृत प्रशासक खाता ही Admin Panel का उपयोग कर सकता है।
-          </p>
-        </div>
-        <button
-          onClick={handleLogout}
-          className="w-full bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-600 text-xs font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer border border-gray-200"
-        >
-          <LogOut className="h-4 w-4" /> लॉग आउट करें
-        </button>
+
+        {user && !isAuthorizedAdmin && (
+          <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-left text-xs text-amber-900 space-y-2">
+            <p className="font-bold">वर्तमान गूगल खाता: {user.email}</p>
+            <p className="text-[11px] text-amber-800">
+              यह गूगल खाता अधिकृत लिस्ट (souravpatel13@gmail.com) में नहीं है। एडमिन पैनल खोलने के लिए ऊपर एडमिन पासकोड से लॉगिन करें।
+            </p>
+            <button
+              onClick={handleLogout}
+              className="text-[11px] font-bold text-red-600 hover:underline cursor-pointer"
+            >
+              लॉग आउट करें
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -1048,20 +1114,12 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
         </div>
 
         <div className="flex items-center gap-2">
-          {!user ? (
-            <button
-              onClick={handleLogin}
-              disabled={authLoading}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
-            >
-              <Lock className="h-4 w-4" /> Google से लॉग इन करें
-            </button>
-          ) : (
+          {isAuthorizedAdmin && (
             <button
               onClick={handleLogout}
               className="bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-600 text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 cursor-pointer border border-gray-200"
             >
-              <LogOut className="h-4 w-4" /> लॉग आउट
+              <LogOut className="h-4 w-4" /> लॉग आउट (Logout)
             </button>
           )}
         </div>
