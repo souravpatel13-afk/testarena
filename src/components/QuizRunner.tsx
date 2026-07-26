@@ -497,7 +497,7 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
 
                   {/* Question content */}
                   <div className="space-y-2">
-                    <h3 className="text-sm sm:text-base font-bold text-gray-900 leading-relaxed font-sans">
+                    <h3 className="text-sm sm:text-base font-bold text-gray-900 leading-relaxed font-sans whitespace-pre-line">
                       {q.text_hi}
                     </h3>
                   </div>
@@ -531,7 +531,7 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
                         >
                           <div>
                             <span className="font-bold text-gray-500 mr-2 uppercase">{String.fromCharCode(65 + optIdx)}.</span>
-                            <span className="font-semibold text-gray-800 font-sans">{displayOpt}</span>
+                            <span className="font-semibold text-gray-800 font-sans whitespace-pre-line">{displayOpt}</span>
                           </div>
 
                           {labelBadge === 'correct' && (
@@ -646,7 +646,7 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
 
             {/* Question content */}
             <div className="space-y-3">
-              <p className="text-sm sm:text-base font-bold text-gray-900 leading-relaxed font-sans">
+              <p className="text-sm sm:text-base font-bold text-gray-900 leading-relaxed font-sans whitespace-pre-line">
                 {activeQuestion.text_hi}
               </p>
             </div>
@@ -712,7 +712,7 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
 
                       <div className="text-xs sm:text-sm">
                         <span className="font-bold text-gray-500 mr-2 uppercase">{String.fromCharCode(65 + optIdx)}.</span>
-                        <span className="font-semibold text-gray-800 font-sans">{displayOpt}</span>
+                        <span className="font-semibold text-gray-800 font-sans whitespace-pre-line">{displayOpt}</span>
                       </div>
                     </div>
 

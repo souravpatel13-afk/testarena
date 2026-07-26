@@ -936,6 +936,11 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ passcode: passcodeInput.trim() })
       });
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        setPasscodeError("AWS सर्वर पर बैकएंड कोड अपडेट नहीं हुआ है! कृपया AWS पर 'git pull' करके प्रोजेक्ट री-बिल्ड (npm run build) और सर्वर रिस्टार्ट (pm2 restart) करें।");
+        return;
+      }
       const data = await res.json();
       if (res.ok && data.success) {
         setIsPasscodeAdmin(true);
@@ -1947,7 +1952,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                             </span>
                           )}
                         </div>
-                        <h4 className="text-xs sm:text-sm font-semibold text-gray-800 leading-relaxed mt-1 font-sans">
+                        <h4 className="text-xs sm:text-sm font-semibold text-gray-800 leading-relaxed mt-1 font-sans whitespace-pre-line">
                           {q.text_hi}
                         </h4>
                       </div>
@@ -1966,13 +1971,13 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                       <div className="pt-3 border-t border-gray-100 text-xs space-y-2 bg-gray-50/50 p-3 rounded-xl mt-2">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {q.options_hi.map((opt, oIdx) => (
-                            <div key={oIdx} className={`p-2 rounded-lg border text-xs ${oIdx === q.correctAnswer ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-gray-200 text-gray-700'}`}>
+                            <div key={oIdx} className={`p-2 rounded-lg border text-xs whitespace-pre-line ${oIdx === q.correctAnswer ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-gray-200 text-gray-700'}`}>
                               {String.fromCharCode(65 + oIdx)}. {opt} {oIdx === q.correctAnswer && '✓'}
                             </div>
                           ))}
                         </div>
                         {q.explanation_hi && (
-                          <div className="text-xs text-gray-600 pt-1">
+                          <div className="text-xs text-gray-600 pt-1 whitespace-pre-line">
                             <strong>व्याख्या:</strong> {q.explanation_hi}
                           </div>
                         )}

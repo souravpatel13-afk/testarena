@@ -484,7 +484,7 @@ export default function Dashboard({ userId, onSelectQuiz, activeQuizzes }: Dashb
                         </span>
                       </div>
                       
-                      <h4 className="text-sm font-semibold text-gray-800 line-clamp-2 mt-1 leading-relaxed font-sans">
+                      <h4 className="text-sm font-semibold text-gray-800 mt-1 leading-relaxed font-sans whitespace-pre-line">
                         {mistake.questionText}
                       </h4>
                     </div>
@@ -502,14 +502,14 @@ export default function Dashboard({ userId, onSelectQuiz, activeQuizzes }: Dashb
                           <p className="text-[10px] text-red-700 font-bold flex items-center gap-1 uppercase">
                             <XCircle className="h-3.5 w-3.5" /> Your Selected Answer
                           </p>
-                          <p className="font-bold text-gray-800 mt-1 font-sans">{mistake.selectedOption}</p>
+                          <p className="font-bold text-gray-800 mt-1 font-sans whitespace-pre-line">{mistake.selectedOption}</p>
                         </div>
 
                         <div className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100">
                           <p className="text-[10px] text-emerald-700 font-bold flex items-center gap-1 uppercase">
                             <CheckCircle className="h-3.5 w-3.5" /> Correct Verified Answer
                           </p>
-                          <p className="font-bold text-gray-800 mt-1 font-sans">{mistake.correctOption}</p>
+                          <p className="font-bold text-gray-800 mt-1 font-sans whitespace-pre-line">{mistake.correctOption}</p>
                         </div>
                       </div>
 
