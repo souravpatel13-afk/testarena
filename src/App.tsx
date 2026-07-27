@@ -68,8 +68,8 @@ export default function App() {
   } | undefined>(undefined);
   const [isQuizRunning, setIsQuizRunning] = useState(false);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const [questionsRes, quizzesRes, userRes, caRes, examRes] = await Promise.all([
         fetch('/api/questions'),
@@ -97,7 +97,7 @@ export default function App() {
     } catch (err: any) {
       setError(err.message || "Failed to synchronise database records");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 

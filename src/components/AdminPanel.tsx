@@ -43,7 +43,18 @@ import {
   UploadCloud,
   ArrowUp,
   ArrowDown,
-  Star
+  Star,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Sliders,
+  Filter,
+  Wand2,
+  Layers,
+  Settings2,
+  Code2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Question, ExamInfo } from '../types';
@@ -53,7 +64,7 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 interface AdminPanelProps {
   questions: Question[];
-  onRefreshQuestions: () => void;
+  onRefreshQuestions: (showLoading?: boolean) => void;
   exams?: ExamInfo[];
   onRefreshExams?: () => void;
 }
@@ -119,7 +130,27 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [sheetPullingType, setSheetPullingType] = useState<'pyq' | 'subject' | 'currentAffairs' | null>(null);
 
   // Navigation tabs for Admin
-  const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'excel' | 'manual' | 'list' | 'currentAffairs' | 'aboutExam'>('sheets');
+  const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'excel' | 'manual' | 'list' | 'currentAffairs' | 'aboutExam' | 'proofread'>('proofread');
+  
+  // Google Apps Script Webhook State
+  const [googleAppsScriptUrl, setGoogleAppsScriptUrl] = useState<string>('');
+  const [inputAppsScriptUrl, setInputAppsScriptUrl] = useState<string>('');
+  const [isAppsScriptModalOpen, setIsAppsScriptModalOpen] = useState(false);
+  const [appsScriptSaving, setAppsScriptSaving] = useState(false);
+  const [appsScriptSuccess, setAppsScriptSuccess] = useState<string | null>(null);
+
+  // Proofreading & Question Audit States
+  const [auditType, setAuditType] = useState<'all' | 'pyq' | 'subject'>('all');
+  const [auditStatus, setAuditStatus] = useState<'all' | 'unreviewed' | 'reviewed' | 'warning'>('all');
+  const [auditSubject, setAuditSubject] = useState<string>('all');
+  const [auditExam, setAuditExam] = useState<string>('all');
+  const [auditSearch, setAuditSearch] = useState<string>('');
+  const [auditCurrentIndex, setAuditCurrentIndex] = useState<number>(0);
+  const [auditLayoutMode, setAuditLayoutMode] = useState<'focus' | 'table'>('focus');
+  const [auditEditingQuestion, setAuditEditingQuestion] = useState<any | null>(null);
+  const [auditSaving, setAuditSaving] = useState(false);
+  const [auditSaveMsg, setAuditSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   
   // Search and view states for list
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,6 +268,9 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
 
         setSpreadsheetIdCA(data.spreadsheetIdCurrentAffairs || data.spreadsheetIdCA || '');
         setInputCA(data.spreadsheetIdCurrentAffairs || data.spreadsheetIdCA || '');
+
+        setGoogleAppsScriptUrl(data.googleAppsScriptUrl || '');
+        setInputAppsScriptUrl(data.googleAppsScriptUrl || '');
       }
     } catch (err) {
       console.error("Failed to fetch settings:", err);
@@ -270,6 +304,218 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   };
 
   // Google Sheet Save & Sync Handlers
+  // --- Proofreading & Audit System Logic ---
+  
+  // Filtered Questions Memo for Proofreading
+  const filteredAuditQuestions = React.useMemo(() => {
+    return questions.filter((q) => {
+      // Type Filter (PYQ vs Subject)
+      if (auditType === 'pyq' && (!q.exam || !q.exam.trim())) return false;
+      if (auditType === 'subject' && q.exam && q.exam.trim()) return false;
+
+      // Subject Filter
+      if (auditSubject !== 'all' && q.subject !== auditSubject) return false;
+
+      // Exam Filter
+      if (auditExam !== 'all' && q.exam !== auditExam) return false;
+
+      // Status Filter
+      if (auditStatus === 'reviewed' && !(q as any).reviewed) return false;
+      if (auditStatus === 'unreviewed' && (q as any).reviewed) return false;
+      if (auditStatus === 'warning') {
+        const hasWarning =
+          !q.text_hi ||
+          q.text_hi.trim().length < 5 ||
+          !q.options_hi ||
+          q.options_hi.length < 4 ||
+          q.options_hi.some((opt) => !opt || !opt.trim()) ||
+          q.text_hi.includes('  ') ||
+          (q.explanation_hi && q.explanation_hi.includes('  '));
+        if (!hasWarning) return false;
+      }
+
+      // Search Filter
+      if (auditSearch.trim()) {
+        const term = auditSearch.toLowerCase();
+        const matchesText = q.text_hi?.toLowerCase().includes(term);
+        const matchesId = q.id?.toLowerCase().includes(term);
+        const matchesSub = q.subject?.toLowerCase().includes(term);
+        const matchesExam = q.exam?.toLowerCase().includes(term);
+        const matchesTopic = q.topic?.toLowerCase().includes(term);
+        if (!matchesText && !matchesId && !matchesSub && !matchesExam && !matchesTopic) return false;
+      }
+
+      return true;
+    });
+  }, [questions, auditType, auditSubject, auditExam, auditStatus, auditSearch]);
+
+  // Keep active editing question in sync with current index
+  useEffect(() => {
+    if (filteredAuditQuestions.length > 0) {
+      const idx = Math.min(Math.max(0, auditCurrentIndex), filteredAuditQuestions.length - 1);
+      const target = filteredAuditQuestions[idx];
+      if (target) {
+        setAuditEditingQuestion({
+          ...target,
+          options_hi: target.options_hi ? [...target.options_hi] : ['', '', '', ''],
+        });
+      }
+    } else {
+      setAuditEditingQuestion(null);
+    }
+  }, [auditCurrentIndex, filteredAuditQuestions]);
+
+  // Reset index when filters change
+  useEffect(() => {
+    setAuditCurrentIndex(0);
+  }, [auditType, auditSubject, auditExam, auditStatus, auditSearch]);
+
+  // Keyboard shortcut listener for fast editing (Alt+S or Ctrl+S to save & next)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (activeSubTab !== 'proofread') return;
+      if ((e.ctrlKey || e.altKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveAuditQuestion(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeSubTab, auditEditingQuestion, auditCurrentIndex, filteredAuditQuestions]);
+
+  // Unique list of subjects and exams for audit dropdown filters
+  const availableAuditSubjects = React.useMemo(() => {
+    const set = new Set<string>();
+    questions.forEach((q) => {
+      if (q.subject) set.add(q.subject);
+    });
+    return Array.from(set);
+  }, [questions]);
+
+  const availableAuditExams = React.useMemo(() => {
+    const set = new Set<string>();
+    questions.forEach((q) => {
+      if (q.exam && q.exam.trim()) set.add(q.exam);
+    });
+    return Array.from(set);
+  }, [questions]);
+
+  // Review status stats
+  const reviewedCount = React.useMemo(() => {
+    return questions.filter((q) => (q as any).reviewed).length;
+  }, [questions]);
+
+  // Save current question logic
+  const handleSaveAuditQuestion = async (advanceNext = false) => {
+    if (!auditEditingQuestion || !auditEditingQuestion.id) return;
+
+    setAuditSaving(true);
+    setAuditSaveMsg(null);
+
+    try {
+      const payload = {
+        ...auditEditingQuestion,
+        reviewed: auditEditingQuestion.reviewed ?? true
+      };
+
+      const res = await fetch(`/api/questions/${encodeURIComponent(auditEditingQuestion.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (onRefreshQuestions) onRefreshQuestions(false);
+
+        let statusText = "सफलतापूर्वक सहेजा गया!";
+        if (data.sheetSynced) {
+          statusText += " (गूगल शीट लाइव अपडेट हुआ ✓)";
+        } else if (googleAppsScriptUrl) {
+          statusText += " (वेबसाइट डेटाबेस सहेजा गया - गूगल शीट वेबहुक सिंक चेतावनी)";
+        } else {
+          statusText += " (वेबसाइट डेटाबेस अपडेट हुआ)";
+        }
+
+        setAuditSaveMsg({ type: 'success', text: statusText });
+
+        if (advanceNext) {
+          if (auditStatus === 'unreviewed') {
+            if (auditCurrentIndex >= filteredAuditQuestions.length - 1 && auditCurrentIndex > 0) {
+              setAuditCurrentIndex((prev) => prev - 1);
+            }
+          } else {
+            if (auditCurrentIndex < filteredAuditQuestions.length - 1) {
+              setAuditCurrentIndex((prev) => prev + 1);
+            }
+          }
+        }
+      } else {
+        setAuditSaveMsg({ type: 'error', text: data.error || "प्रश्न सहेजा नहीं जा सका।" });
+      }
+    } catch (err: any) {
+      setAuditSaveMsg({ type: 'error', text: err.message || "सर्वर से कनेक्ट करने में त्रुटि।" });
+    } finally {
+      setAuditSaving(false);
+    }
+  };
+
+  // Quick formatting helpers
+  const handleCleanExtraSpaces = () => {
+    if (!auditEditingQuestion) return;
+    const cleanStr = (s: string) => (s || '').replace(/[ \t]+/g, ' ').trim();
+    setAuditEditingQuestion({
+      ...auditEditingQuestion,
+      text_hi: cleanStr(auditEditingQuestion.text_hi),
+      options_hi: (auditEditingQuestion.options_hi || []).map(cleanStr),
+      explanation_hi: cleanStr(auditEditingQuestion.explanation_hi || '')
+    });
+  };
+
+  const handleAddLineBreakToQuestion = () => {
+    if (!auditEditingQuestion) return;
+    setAuditEditingQuestion({
+      ...auditEditingQuestion,
+      text_hi: (auditEditingQuestion.text_hi || '') + '\n'
+    });
+  };
+
+  const handleSaveAppsScriptUrl = async () => {
+    setAppsScriptSaving(true);
+    setAppsScriptSuccess(null);
+    const ok = await saveSettingField({ googleAppsScriptUrl: inputAppsScriptUrl.trim() });
+    if (ok) {
+      setGoogleAppsScriptUrl(inputAppsScriptUrl.trim());
+      setAppsScriptSuccess("गूगल एप्स स्क्रिप्ट (Google Apps Script) वेबहुक URL सफलतापूर्वक सहेजा गया!");
+    }
+    setAppsScriptSaving(false);
+  };
+
+  const handleExportCSV = () => {
+    const header = ['ID', 'Text_HI', 'Option_A', 'Option_B', 'Option_C', 'Option_D', 'Correct_Index_1_4', 'Explanation_HI', 'Subject_Or_Exam', 'Topic'];
+    const rows = filteredAuditQuestions.map((q) => [
+      q.id,
+      `"${(q.text_hi || '').replace(/"/g, '""')}"`,
+      `"${(q.options_hi?.[0] || '').replace(/"/g, '""')}"`,
+      `"${(q.options_hi?.[1] || '').replace(/"/g, '""')}"`,
+      `"${(q.options_hi?.[2] || '').replace(/"/g, '""')}"`,
+      `"${(q.options_hi?.[3] || '').replace(/"/g, '""')}"`,
+      (q.correctAnswer ?? 0) + 1,
+      `"${(q.explanation_hi || '').replace(/"/g, '""')}"`,
+      `"${(q.exam || q.subject || '').replace(/"/g, '""')}"`,
+      `"${(q.topic || '').replace(/"/g, '""')}"`
+    ]);
+
+    const csvContent = [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TestArena_Corrected_Questions_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
   const handleSaveSheetIds = async () => {
     const pyqId = extractSheetId(inputPyq);
     const subjectId = extractSheetId(inputSubject);
@@ -1133,6 +1379,18 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
       {/* Main Subtab Navigation */}
       <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 pb-3">
         <button
+          onClick={() => setActiveSubTab('proofread')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+            activeSubTab === 'proofread'
+              ? 'bg-amber-600 text-white shadow-md ring-2 ring-amber-300'
+              : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200'
+          }`}
+        >
+          <Wand2 className="h-4 w-4 text-amber-500 animate-pulse" />
+          🔍 तीव्र प्रश्न समीक्षा व त्रुटि सुधार (2,000+ Questions Audit)
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('sheets')}
           className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
             activeSubTab === 'sheets'
@@ -1192,6 +1450,629 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
 
       {/* Tab Panels */}
       <div className="space-y-6">
+
+        {/* PROOFREADING & QUESTION AUDIT TAB */}
+        {activeSubTab === 'proofread' && (
+          <div className="space-y-6">
+            {/* Realtime Status Header Card */}
+            <div className="bg-gradient-to-r from-amber-900 via-amber-800 to-amber-950 text-white rounded-3xl p-6 shadow-md border border-amber-700/50">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                <div className="space-y-2 max-w-2xl">
+                  <div className="inline-flex items-center gap-2 bg-amber-500/20 text-amber-200 border border-amber-400/30 px-3 py-1 rounded-full text-[11px] font-bold">
+                    <Wand2 className="h-3.5 w-3.5 text-amber-300" /> Fast Audit & Single-Question Proofreader
+                  </div>
+                  <h2 className="text-lg sm:text-xl font-extrabold text-white">
+                    2,000+ प्रश्नोत्तर समीक्षा व त्रुटि निवारण केंद्र
+                  </h2>
+                  <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
+                    यहाँ से आप <strong>PYQ (प्रतियोगी परीक्षा प्रश्न)</strong> और <strong>विषयवार अभ्यास (Subject-wise)</strong> के सभी प्रश्नों को एक-एक करके चेक, एडिट व फॉर्मेट कर सकते हैं।
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                  {/* Google Sheets Sync Badge */}
+                  <button
+                    onClick={() => setIsAppsScriptModalOpen(true)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+                      googleAppsScriptUrl
+                        ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40 hover:bg-emerald-500/30'
+                        : 'bg-amber-500/20 text-amber-200 border-amber-400/40 hover:bg-amber-500/30'
+                    }`}
+                  >
+                    <Code2 className="h-4 w-4" />
+                    {googleAppsScriptUrl ? "🟢 गूगल शीट लाइव ऑटो-सिंक सक्रिय" : "⚙️ गूगल शीट ऑटो-सिंक सेटअप"}
+                  </button>
+
+                  <button
+                    onClick={() => setIsExportModalOpen(true)}
+                    className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <Download className="h-4 w-4 text-amber-300" /> Excel / CSV निर्यात
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress Summary Stats Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-amber-700/50 text-xs">
+                <div className="bg-amber-950/40 p-3 rounded-2xl border border-amber-700/30">
+                  <span className="text-amber-300/80 text-[10px] font-bold block uppercase">कुल डेटाबेस प्रश्न</span>
+                  <span className="text-lg font-black text-white">{questions.length}</span>
+                </div>
+                <div className="bg-amber-950/40 p-3 rounded-2xl border border-amber-700/30">
+                  <span className="text-emerald-300/80 text-[10px] font-bold block uppercase">समीक्षित प्रश्न</span>
+                  <span className="text-lg font-black text-emerald-300">{reviewedCount}</span>
+                </div>
+                <div className="bg-amber-950/40 p-3 rounded-2xl border border-amber-700/30">
+                  <span className="text-blue-300/80 text-[10px] font-bold block uppercase">फिल्टर परिणाम</span>
+                  <span className="text-lg font-black text-blue-300">{filteredAuditQuestions.length}</span>
+                </div>
+                <div className="bg-amber-950/40 p-3 rounded-2xl border border-amber-700/30">
+                  <span className="text-amber-200/80 text-[10px] font-bold block uppercase">शॉर्टकट की</span>
+                  <span className="text-xs font-bold text-amber-200">Alt + S (Save & Next)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter & Toolbar Bar */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {/* Section Filter */}
+                <div>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">1. वर्ग चुनें (Section)</label>
+                  <select
+                    value={auditType}
+                    onChange={(e) => setAuditType(e.target.value as any)}
+                    className="w-full p-2 text-xs font-bold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50 cursor-pointer"
+                  >
+                    <option value="all">सभी वर्ग (PYQ + Subject-wise)</option>
+                    <option value="pyq">PYQs (प्रतियोगी परीक्षा प्रश्न)</option>
+                    <option value="subject">विषयवार अभ्यास (Subject Practice)</option>
+                  </select>
+                </div>
+
+                {/* Subject Filter */}
+                <div>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">2. विषय चुनें (Subject)</label>
+                  <select
+                    value={auditSubject}
+                    onChange={(e) => setAuditSubject(e.target.value)}
+                    className="w-full p-2 text-xs font-bold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50 cursor-pointer"
+                  >
+                    <option value="all">सभी विषय ({availableAuditSubjects.length})</option>
+                    {availableAuditSubjects.map((sub) => (
+                      <option key={sub} value={sub}>{sub}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Exam Filter */}
+                <div>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">3. परीक्षा चुनें (Exam)</label>
+                  <select
+                    value={auditExam}
+                    onChange={(e) => setAuditExam(e.target.value)}
+                    className="w-full p-2 text-xs font-bold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50 cursor-pointer"
+                  >
+                    <option value="all">सभी परीक्षाएं ({availableAuditExams.length})</option>
+                    {availableAuditExams.map((ex) => (
+                      <option key={ex} value={ex}>{ex}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Status Filter */}
+                <div>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">4. समीक्षा स्थिति (Status)</label>
+                  <select
+                    value={auditStatus}
+                    onChange={(e) => setAuditStatus(e.target.value as any)}
+                    className="w-full p-2 text-xs font-bold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50 cursor-pointer"
+                  >
+                    <option value="all">सभी प्रश्न</option>
+                    <option value="unreviewed">असमरक्षित (Unreviewed)</option>
+                    <option value="reviewed">समीक्षित (Reviewed)</option>
+                    <option value="warning">⚠️ सम्भावित त्रुटि (Formatting Issue)</option>
+                  </select>
+                </div>
+
+                {/* Search Bar */}
+                <div>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">5. खोजें (Search Text/ID)</label>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="शब्द या ID..."
+                      value={auditSearch}
+                      onChange={(e) => setAuditSearch(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 w-full text-xs font-medium border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* View Layout Mode Switcher */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs">
+                <div className="flex items-center gap-2 text-gray-600 font-bold">
+                  <span>लेआउट मोड:</span>
+                  <button
+                    onClick={() => setAuditLayoutMode('focus')}
+                    className={`px-3 py-1 rounded-lg transition cursor-pointer font-bold flex items-center gap-1.5 ${
+                      auditLayoutMode === 'focus'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Edit3 className="h-3.5 w-3.5" /> सिंगल प्रश्न सम्पादक (Split View)
+                  </button>
+                  <button
+                    onClick={() => setAuditLayoutMode('table')}
+                    className={`px-3 py-1 rounded-lg transition cursor-pointer font-bold flex items-center gap-1.5 ${
+                      auditLayoutMode === 'table'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <List className="h-3.5 w-3.5" /> सम्पूर्ण सूची ग्रिड (Table)
+                  </button>
+                </div>
+
+                <div className="text-gray-500 text-[11px] font-semibold">
+                  कुल परिणाम: <span className="font-extrabold text-amber-700">{filteredAuditQuestions.length}</span> प्रश्न मिले
+                </div>
+              </div>
+            </div>
+
+            {/* FOCUS SINGLE QUESTION SPLIT SCREEN EDITOR */}
+            {auditLayoutMode === 'focus' && (
+              <div>
+                {filteredAuditQuestions.length === 0 ? (
+                  <div className="bg-white p-12 text-center rounded-2xl border border-gray-200 space-y-3">
+                    <Search className="h-10 w-10 text-gray-300 mx-auto" />
+                    <p className="text-sm font-bold text-gray-700">चुने गए फिल्टर के आधार पर कोई प्रश्न नहीं मिला।</p>
+                    <p className="text-xs text-gray-500">कृपया ऊपर से फिल्टर या सर्च बदलें।</p>
+                  </div>
+                ) : auditEditingQuestion ? (
+                  <div className="space-y-4">
+                    {/* Pagination Header Bar */}
+                    <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <button
+                          disabled={auditCurrentIndex === 0}
+                          onClick={() => setAuditCurrentIndex((prev) => Math.max(0, prev - 1))}
+                          className="px-3 py-1.5 bg-white hover:bg-gray-100 disabled:opacity-40 border border-gray-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <ChevronLeft className="h-4 w-4" /> पिछला
+                        </button>
+
+                        <span className="text-xs font-extrabold text-amber-900 bg-amber-100/80 px-3 py-1 rounded-lg border border-amber-300">
+                          प्रश्न {auditCurrentIndex + 1} / {filteredAuditQuestions.length}
+                        </span>
+
+                        <button
+                          disabled={auditCurrentIndex >= filteredAuditQuestions.length - 1}
+                          onClick={() => setAuditCurrentIndex((prev) => Math.min(filteredAuditQuestions.length - 1, prev + 1))}
+                          className="px-3 py-1.5 bg-white hover:bg-gray-100 disabled:opacity-40 border border-gray-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        >
+                          अगला <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Quick Clean Spaces Button */}
+                        <button
+                          onClick={handleCleanExtraSpaces}
+                          className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                          title="अतिरिक्त स्पेस साफ करें"
+                        >
+                          <Wand2 className="h-3.5 w-3.5 text-amber-600" /> स्पेस साफ करें
+                        </button>
+
+                        {/* Save Only */}
+                        <button
+                          disabled={auditSaving}
+                          onClick={() => handleSaveAuditQuestion(false)}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="सहेजें (उसी प्रश्न पर रहें)"
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          {auditSaving ? "सहेजा..." : "सहेजें"}
+                        </button>
+
+                        {/* Save & Next Action */}
+                        <button
+                          disabled={auditSaving}
+                          onClick={() => handleSaveAuditQuestion(true)}
+                          className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="सहेजें और अगला प्रश्न (Alt+S)"
+                        >
+                          <CheckCircle className="h-3.5 w-3.5" />
+                          {auditSaving ? "सहेजा..." : "सहेजें और अगला (Alt+S)"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Status Alert Message */}
+                    {auditSaveMsg && (
+                      <div className={`p-3 rounded-xl text-xs font-bold border flex items-center justify-between gap-2 ${
+                        auditSaveMsg.type === 'success'
+                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                          : 'bg-red-50 text-red-900 border-red-200'
+                      }`}>
+                        <span>{auditSaveMsg.text}</span>
+                        <button onClick={() => setAuditSaveMsg(null)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                      </div>
+                    )}
+
+                    {/* Main Dual Pane Grid: Form (Left) vs Live Preview (Right) */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                      {/* LEFT PANE: EDITING FORM */}
+                      <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4 shadow-2xs">
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                          <h3 className="text-xs font-extrabold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <Edit3 className="h-4 w-4 text-amber-600" /> प्रश्न सम्पादक (Edit Question Data)
+                          </h3>
+                          <span className="text-[10px] font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                            ID: {auditEditingQuestion.id}
+                          </span>
+                        </div>
+
+                        {/* Classification Info */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[11px] font-bold text-gray-700 block mb-1">विषय (Subject)*</label>
+                            <input
+                              type="text"
+                              value={auditEditingQuestion.subject || ''}
+                              onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, subject: e.target.value })}
+                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50/50"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-bold text-gray-700 block mb-1">टॉपिक (Topic)</label>
+                            <input
+                              type="text"
+                              value={auditEditingQuestion.topic || ''}
+                              onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, topic: e.target.value })}
+                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50/50"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-bold text-gray-700 block mb-1">परीक्षा नाम (Exam Name - for PYQ)</label>
+                            <input
+                              type="text"
+                              placeholder="उदा. CGPSC Prelims 2023"
+                              value={auditEditingQuestion.exam || ''}
+                              onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, exam: e.target.value })}
+                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50/50"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-bold text-gray-700 block mb-1">वर्ष (Year)</label>
+                            <input
+                              type="number"
+                              placeholder="2023"
+                              value={auditEditingQuestion.year || ''}
+                              onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, year: parseInt(e.target.value) || undefined })}
+                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50/50"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Question Text Hindi */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-gray-700 block">प्रश्न सामग्री (Hindi Text)*</label>
+                            <button
+                              type="button"
+                              onClick={handleAddLineBreakToQuestion}
+                              className="text-[10px] font-bold text-amber-700 hover:bg-amber-50 px-2 py-0.5 rounded border border-amber-200 transition cursor-pointer"
+                            >
+                              + नई पंक्ति (\n Enter) जोड़ें
+                            </button>
+                          </div>
+                          <textarea
+                            rows={4}
+                            value={auditEditingQuestion.text_hi || ''}
+                            onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, text_hi: e.target.value })}
+                            className="w-full p-3 text-xs sm:text-sm font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 leading-relaxed font-sans"
+                            placeholder="यहाँ प्रश्न लिखें..."
+                          />
+                        </div>
+
+                        {/* Options A, B, C, D */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-gray-700 block">विकल्प (Options A, B, C, D) व सही उत्तर चुनिए*</label>
+                            <span className="text-[10px] text-emerald-700 font-extrabold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              सही उत्तर: विकल्प {String.fromCharCode(65 + (auditEditingQuestion.correctAnswer ?? 0))}
+                            </span>
+                          </div>
+
+                          {['A', 'B', 'C', 'D'].map((optLabel, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              {/* Radio selector for correct answer */}
+                              <label className={`p-2 rounded-xl border flex items-center gap-1.5 cursor-pointer text-xs font-extrabold transition ${
+                                (auditEditingQuestion.correctAnswer ?? 0) === idx
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                  : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                              }`}>
+                                <input
+                                  type="radio"
+                                  name="correctOptionRadio"
+                                  checked={(auditEditingQuestion.correctAnswer ?? 0) === idx}
+                                  onChange={() => setAuditEditingQuestion({ ...auditEditingQuestion, correctAnswer: idx })}
+                                  className="hidden"
+                                />
+                                <span>{optLabel}.</span>
+                              </label>
+
+                              {/* Option Text Input */}
+                              <input
+                                type="text"
+                                value={auditEditingQuestion.options_hi?.[idx] || ''}
+                                onChange={(e) => {
+                                  const updatedOpts = [...(auditEditingQuestion.options_hi || ['', '', '', ''])];
+                                  updatedOpts[idx] = e.target.value;
+                                  setAuditEditingQuestion({ ...auditEditingQuestion, options_hi: updatedOpts });
+                                }}
+                                className={`w-full p-2.5 text-xs font-semibold border rounded-xl focus:ring-2 focus:ring-amber-500 font-sans ${
+                                  (auditEditingQuestion.correctAnswer ?? 0) === idx
+                                    ? 'border-emerald-300 bg-emerald-50/30'
+                                    : 'border-gray-200 bg-white'
+                                }`}
+                                placeholder={`विकल्प ${optLabel}...`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Explanation Hindi */}
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-gray-700 block">व्याख्या (Hindi Explanation)</label>
+                          <textarea
+                            rows={3}
+                            value={auditEditingQuestion.explanation_hi || ''}
+                            onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, explanation_hi: e.target.value })}
+                            className="w-full p-2.5 text-xs font-medium border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 font-sans"
+                            placeholder="यहाँ उत्तर की व्याख्या/सॉल्यूशन लिखें..."
+                          />
+                        </div>
+
+                        {/* Reviewed Toggle & Actions */}
+                        <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-800">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(auditEditingQuestion.reviewed)}
+                              onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, reviewed: e.target.checked })}
+                              className="h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
+                            />
+                            <span>✓ यह प्रश्न समीक्षित (Verified) मार्क करें</span>
+                          </label>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm('क्या आप इस प्रश्न को हटाना चाहते हैं?')) {
+                                handleDeleteQuestion(auditEditingQuestion.id);
+                              }
+                            }}
+                            className="text-xs text-red-600 hover:text-red-800 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                          >
+                            <Trash className="h-3.5 w-3.5" /> हटाएं
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* RIGHT PANE: LIVE STUDENT PREVIEW */}
+                      <div className="bg-slate-900 text-white rounded-2xl border border-slate-800 p-5 space-y-4 shadow-md sticky top-6">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                          <h3 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <Eye className="h-4 w-4 text-amber-400" /> छात्र स्क्रीन लाइव पूर्वावलोकन (Candidate Live View)
+                          </h3>
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-bold border border-emerald-500/30">
+                            Realtime
+                          </span>
+                        </div>
+
+                        {/* Candidate Rendered Card */}
+                        <div className="bg-white text-gray-900 p-5 rounded-2xl space-y-4 shadow-sm border border-gray-200">
+                          {/* Tags Header */}
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-extrabold">
+                            <span className="bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-md">
+                              {auditEditingQuestion.subject || 'विषय'}
+                            </span>
+                            {auditEditingQuestion.topic && (
+                              <span className="bg-blue-100 text-blue-900 px-2.5 py-0.5 rounded-md">
+                                {auditEditingQuestion.topic}
+                              </span>
+                            )}
+                            {auditEditingQuestion.exam && (
+                              <span className="bg-purple-100 text-purple-900 px-2.5 py-0.5 rounded-md">
+                                {auditEditingQuestion.exam} {auditEditingQuestion.year ? `(${auditEditingQuestion.year})` : ''}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Question Text */}
+                          <h4 className="text-sm sm:text-base font-bold text-gray-900 leading-relaxed font-sans whitespace-pre-line border-b border-gray-100 pb-3">
+                            {auditEditingQuestion.text_hi || 'यहाँ प्रश्न दिखाई देगा...'}
+                          </h4>
+
+                          {/* Options Grid */}
+                          <div className="space-y-2">
+                            {(auditEditingQuestion.options_hi || []).map((opt: string, oIdx: number) => {
+                              const isCorrect = (auditEditingQuestion.correctAnswer ?? 0) === oIdx;
+                              return (
+                                <div
+                                  key={oIdx}
+                                  className={`p-3 rounded-xl border text-xs sm:text-sm font-semibold transition flex items-center justify-between ${
+                                    isCorrect
+                                      ? 'bg-emerald-50 border-emerald-400 text-emerald-900 ring-1 ring-emerald-300 font-bold'
+                                      : 'bg-gray-50 border-gray-200 text-gray-800'
+                                  }`}
+                                >
+                                  <div className="flex items-start gap-2">
+                                    <span className="font-extrabold text-gray-500 uppercase">{String.fromCharCode(65 + oIdx)}.</span>
+                                    <span className="whitespace-pre-line font-sans">{opt || '(खाली विकल्प)'}</span>
+                                  </div>
+                                  {isCorrect && (
+                                    <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                                      <Check className="h-3 w-3" /> सही
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Explanation Card */}
+                          {auditEditingQuestion.explanation_hi && (
+                            <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 space-y-1 text-xs">
+                              <span className="font-extrabold text-amber-900 block flex items-center gap-1">
+                                💡 व्याख्या / उत्तर कुंजी (Explanation Key):
+                              </span>
+                              <p className="text-gray-800 leading-relaxed font-sans whitespace-pre-line font-medium">
+                                {auditEditingQuestion.explanation_hi}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* BOTTOM PRIMARY ACTION & NAVIGATION BAR */}
+                    <div className="bg-slate-900 text-white p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4 sticky bottom-4 z-40 mt-6">
+                      {/* Prev / Counter / Next Navigation */}
+                      <div className="flex items-center gap-2.5 w-full md:w-auto justify-between md:justify-start">
+                        <button
+                          disabled={auditCurrentIndex === 0}
+                          onClick={() => setAuditCurrentIndex((prev) => Math.max(0, prev - 1))}
+                          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-30 border border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <ChevronLeft className="h-4 w-4" /> पिछला प्रश्न
+                        </button>
+
+                        <span className="text-xs font-black text-amber-400 bg-slate-950/90 px-3.5 py-1.5 rounded-xl border border-amber-500/30">
+                          प्रश्न {auditCurrentIndex + 1} / {filteredAuditQuestions.length}
+                        </span>
+
+                        <button
+                          disabled={auditCurrentIndex >= filteredAuditQuestions.length - 1}
+                          onClick={() => setAuditCurrentIndex((prev) => Math.min(filteredAuditQuestions.length - 1, prev + 1))}
+                          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-30 border border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          अगला प्रश्न <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {/* Action Buttons: Clean, Save, Save & Next */}
+                      <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
+                        <button
+                          onClick={handleCleanExtraSpaces}
+                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                          title="अतिरिक्त स्पेस साफ करें"
+                        >
+                          <Wand2 className="h-3.5 w-3.5 text-amber-400" /> स्पेस साफ करें
+                        </button>
+
+                        <button
+                          disabled={auditSaving}
+                          onClick={() => handleSaveAuditQuestion(false)}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                          title="इसी प्रश्न पर रहें और सहेजें"
+                        >
+                          <Save className="h-4 w-4" />
+                          {auditSaving ? "सहेजा जा रहा है..." : "केवल सहेजें (Save)"}
+                        </button>
+
+                        <button
+                          disabled={auditSaving}
+                          onClick={() => handleSaveAuditQuestion(true)}
+                          className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                          title="सहेजें और अगला प्रश्न (Alt+S)"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                          {auditSaving ? "सहेजा जा रहा है..." : "सहेजें और अगला (Save & Next - Alt+S) ►"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {/* TABLE BATCH GRID VIEW */}
+            {auditLayoutMode === 'table' && (
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-2xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-gray-100 text-gray-800 font-extrabold border-b border-gray-200">
+                        <th className="p-3 w-12 text-center">क्र.</th>
+                        <th className="p-3">वर्ग / विषय</th>
+                        <th className="p-3 max-w-md">प्रश्न (Hindi Text)</th>
+                        <th className="p-3">सही उत्तर</th>
+                        <th className="p-3">स्थिति</th>
+                        <th className="p-3 text-right">कार्रवाई</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredAuditQuestions.map((q, idx) => {
+                        const isSelected = auditEditingQuestion && auditEditingQuestion.id === q.id;
+                        return (
+                          <tr
+                            key={q.id}
+                            className={`hover:bg-amber-50/50 transition ${isSelected ? 'bg-amber-100/60 font-medium' : ''}`}
+                          >
+                            <td className="p-3 text-center font-bold text-gray-500">{idx + 1}</td>
+                            <td className="p-3">
+                              <span className="font-bold text-gray-800 block">{q.subject}</span>
+                              <span className="text-[10px] text-gray-500">{q.exam || q.topic}</span>
+                            </td>
+                            <td className="p-3 max-w-md">
+                              <p className="line-clamp-2 font-semibold text-gray-900 font-sans whitespace-pre-line">
+                                {q.text_hi}
+                              </p>
+                            </td>
+                            <td className="p-3">
+                              <span className="bg-emerald-100 text-emerald-900 font-extrabold px-2 py-0.5 rounded text-[11px]">
+                                {String.fromCharCode(65 + (q.correctAnswer ?? 0))}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              {(q as any).reviewed ? (
+                                <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  ✓ समीक्षित
+                                </span>
+                              ) : (
+                                <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px] font-semibold">
+                                  असमरक्षित
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right">
+                              <button
+                                onClick={() => {
+                                  setAuditCurrentIndex(idx);
+                                  setAuditLayoutMode('focus');
+                                }}
+                                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+                              >
+                                सम्पादित करें
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* GOOGLE SHEETS SYNC TAB */}
         {activeSubTab === 'sheets' && (
@@ -2401,6 +3282,234 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
         )}
 
       </div>
+
+      {/* GOOGLE APPS SCRIPT SETUP MODAL */}
+      {isAppsScriptModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 space-y-5 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-2">
+                <Code2 className="h-6 w-6 text-emerald-600" />
+                <h3 className="text-base font-black text-gray-900">
+                  गूगल शीट्स ऑटो-सिंक वेबहुक सेटअप (Google Apps Script)
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsAppsScriptModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 font-bold p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs text-gray-700 leading-relaxed font-medium">
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-1">
+                <p className="font-extrabold text-emerald-900 flex items-center gap-1.5">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" />
+                  यह क्या करता है?
+                </p>
+                <p>
+                  जब आप TestArena में किसी प्रश्न को सम्पादित (Edit) करके सहेजेंगे, तो यह कोड आपके गूगल शीट में उस प्रश्न वाली पंक्ति (Row) को <strong>स्वचालित रूप से रियल-टाइम में अपडेट</strong> कर देगा! आपको गूगल शीट में प्रश्न खोजने की ज़रूरत नहीं पड़ेगी।
+                </p>
+              </div>
+
+              {/* Step by step guide */}
+              <div className="space-y-2 bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                <h4 className="font-extrabold text-gray-900">सेटअप निर्देश (3 आसान स्टेप्स):</h4>
+                <ol className="list-decimal list-inside space-y-1 text-gray-800">
+                  <li>अपने गूगल शीट (Google Sheet) में जाएँ और ऊपर मेनू से <strong>Extensions &gt; Apps Script</strong> पर क्लिक करें।</li>
+                  <li>वहाँ मौजूद कोड को हटाकर, नीचे दिया गया पूरा कोड कॉपी करके चिपकाएँ और <strong>Ctrl + S</strong> दबाएँ।</li>
+                  <li>ऊपर दाएँ कोने में <strong>Deploy &gt; New deployment</strong> पर क्लिक करें।</li>
+                  <li>Type में <strong>"Web app"</strong> चुनें, Execute as: <strong>"Me"</strong> और Who has access: <strong>"Anyone"</strong> सेट करके <strong>Deploy</strong> दबाएँ।</li>
+                  <li>प्राप्त <strong>Web App URL</strong> को नीचे इनपुट बॉक्स में पेस्ट करके सहेजें।</li>
+                </ol>
+              </div>
+
+              {/* Ready to copy Apps Script code */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-gray-900">कॉपी करने हेतु Apps Script कोड:</label>
+                  <button
+                    onClick={() => {
+                      const code = `function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    if (data.action === 'UPDATE_QUESTION') {
+      var q = data.question;
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheetName = (data.sheetType === 'pyq' || q.exam) ? 'PYQ' : 'Subject';
+      var sheet = ss.getSheetByName(sheetName) || ss.getSheets()[0];
+      var rows = sheet.getDataRange().getValues();
+      
+      var targetRow = -1;
+      for (var i = 1; i < rows.length; i++) {
+        var rowId = String(rows[i][0] || '').trim();
+        var rowText = String(rows[i][1] || '').trim();
+        if ((q.id && rowId === String(q.id).trim()) || (q.text_hi && rowText.substring(0, 30) === String(q.text_hi).substring(0, 30))) {
+          targetRow = i + 1;
+          break;
+        }
+      }
+      
+      if (targetRow > 0) {
+        var optA = (q.options_hi && q.options_hi[0]) || '';
+        var optB = (q.options_hi && q.options_hi[1]) || '';
+        var optC = (q.options_hi && q.options_hi[2]) || '';
+        var optD = (q.options_hi && q.options_hi[3]) || '';
+        var correctVal = (q.correctAnswer !== undefined) ? (q.correctAnswer + 1) : 1;
+        
+        sheet.getRange(targetRow, 1, 1, 10).setValues([[
+          q.id || '',
+          q.text_hi || '',
+          optA,
+          optB,
+          optC,
+          optD,
+          correctVal,
+          q.explanation_hi || '',
+          q.exam || q.subject || '',
+          q.topic || ''
+        ]]);
+        return ContentService.createTextOutput(JSON.stringify({ status: 'success', row: targetRow })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ status: 'not_found' })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+                      navigator.clipboard.writeText(code);
+                      alert('Apps Script कोड क्लिपबोर्ड पर कॉपी हो गया!');
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-1 rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Copy className="h-3.5 w-3.5" /> कोड कॉपी करें
+                  </button>
+                </div>
+                <textarea
+                  readOnly
+                  rows={8}
+                  className="w-full p-3 bg-slate-900 text-emerald-400 font-mono text-[11px] rounded-2xl border border-slate-800 leading-relaxed"
+                  value={`function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    if (data.action === 'UPDATE_QUESTION') {
+      var q = data.question;
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheetName = (data.sheetType === 'pyq' || q.exam) ? 'PYQ' : 'Subject';
+      var sheet = ss.getSheetByName(sheetName) || ss.getSheets()[0];
+      var rows = sheet.getDataRange().getValues();
+      
+      var targetRow = -1;
+      for (var i = 1; i < rows.length; i++) {
+        var rowId = String(rows[i][0] || '').trim();
+        var rowText = String(rows[i][1] || '').trim();
+        if ((q.id && rowId === String(q.id).trim()) || (q.text_hi && rowText.substring(0, 30) === String(q.text_hi).substring(0, 30))) {
+          targetRow = i + 1;
+          break;
+        }
+      }
+      
+      if (targetRow > 0) {
+        var optA = (q.options_hi && q.options_hi[0]) || '';
+        var optB = (q.options_hi && q.options_hi[1]) || '';
+        var optC = (q.options_hi && q.options_hi[2]) || '';
+        var optD = (q.options_hi && q.options_hi[3]) || '';
+        var correctVal = (q.correctAnswer !== undefined) ? (q.correctAnswer + 1) : 1;
+        
+        sheet.getRange(targetRow, 1, 1, 10).setValues([[
+          q.id || '',
+          q.text_hi || '',
+          optA,
+          optB,
+          optC,
+          optD,
+          correctVal,
+          q.explanation_hi || '',
+          q.exam || q.subject || '',
+          q.topic || ''
+        ]]);
+        return ContentService.createTextOutput(JSON.stringify({ status: 'success', row: targetRow })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ status: 'not_found' })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`}
+                />
+              </div>
+
+              {/* WebApp URL Save input */}
+              <div className="space-y-2 pt-2 border-t border-gray-200">
+                <label className="font-bold text-gray-900 block">Deploy किया हुआ Google Apps Script Web App URL यहाँ दर्ज करें:</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://script.google.com/macros/s/AKfycbx.../exec"
+                    value={inputAppsScriptUrl}
+                    onChange={(e) => setInputAppsScriptUrl(e.target.value)}
+                    className="flex-1 p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-xs focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <button
+                    disabled={appsScriptSaving}
+                    onClick={handleSaveAppsScriptUrl}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs transition cursor-pointer shadow-xs flex items-center gap-1.5"
+                  >
+                    <Save className="h-4 w-4" />
+                    {appsScriptSaving ? "सहेजा जा रहा है..." : "URL सहेजें"}
+                  </button>
+                </div>
+                {appsScriptSuccess && (
+                  <p className="text-xs text-emerald-800 font-bold bg-emerald-50 p-2 rounded-xl border border-emerald-200">
+                    {appsScriptSuccess}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EXPORT CLEAN DATA MODAL */}
+      {isExportModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-5 shadow-2xl border border-gray-100">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-2">
+                <Download className="h-6 w-6 text-amber-600" />
+                <h3 className="text-base font-black text-gray-900">
+                  संशोधित प्रश्नों का CSV / Excel निर्यात
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsExportModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 font-bold p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs text-gray-700 leading-relaxed font-medium">
+              <p>
+                आपने जिन प्रश्नों के स्पेलिंग, उत्तर या पंक्तियों को सुधारा है, आप उन सभी <strong>{filteredAuditQuestions.length}</strong> संशोधित प्रश्नों की पूरी क्लीन लिस्ट को 1-क्लिक में डाउनलोड कर सकते हैं:
+              </p>
+
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl space-y-3">
+                <button
+                  onClick={handleExportCSV}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-extrabold p-3 rounded-xl transition cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                >
+                  <Download className="h-4 w-4" /> शुद्ध प्रश्नों की CSV फाइल डाउनलोड करें (.CSV File)
+                </button>
+                <p className="text-[11px] text-amber-900 font-semibold text-center">
+                  इस CSV को आप सीधे अपने Google Sheet में <strong>File &gt; Import &gt; Replace Sheet</strong> करके एक बार में सभी त्रुटिहीन प्रश्नों से अपडेट कर सकते हैं।
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

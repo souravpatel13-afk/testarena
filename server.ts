@@ -2,9 +2,13 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import * as XLSX from 'xlsx';
+import compression from 'compression';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+// Enable Gzip/Brotli compression for fast mobile loading
+app.use(compression());
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -334,7 +338,13 @@ const initialExamInfo = [
 ];
 
 // Database Loader / Saver Helpers
+let cachedDbInMemory: any = null;
+
 function loadDatabase() {
+  if (cachedDbInMemory) {
+    return cachedDbInMemory;
+  }
+
   const BACKUP_FILE = path.join(DATA_DIR, 'db.json.bak');
 
   if (fs.existsSync(DB_FILE)) {
@@ -363,6 +373,7 @@ function loadDatabase() {
         if (dirty) {
           saveDatabase(db);
         }
+        cachedDbInMemory = db;
         return db;
       }
     } catch (error) {
@@ -374,6 +385,7 @@ function loadDatabase() {
             const db = JSON.parse(bakData);
             console.log("Successfully restored database from backup file.");
             saveDatabase(db);
+            cachedDbInMemory = db;
             return db;
           }
         } catch (bakError) {
@@ -398,10 +410,12 @@ function loadDatabase() {
     }
   };
   saveDatabase(defaultDb);
+  cachedDbInMemory = defaultDb;
   return defaultDb;
 }
 
 function saveDatabase(data: any) {
+  cachedDbInMemory = data;
   try {
     const TEMP_FILE = path.join(DATA_DIR, 'db.json.tmp');
     const BACKUP_FILE = path.join(DATA_DIR, 'db.json.bak');
@@ -449,6 +463,112 @@ app.post('/api/questions', (req, res) => {
   res.status(201).json(newQuestion);
 });
 
+// Update single question by ID
+app.put('/api/questions/:id', async (req, res) => {
+  const db = loadDatabase();
+  const qId = req.params.id;
+  db.questions = db.questions || [];
+  
+  const qIndex = db.questions.findIndex((q: any) => q.id === qId);
+  if (qIndex === -1) {
+    return res.status(404).json({ error: "Question not found" });
+  }
+
+  const updatedData = req.body;
+  const existingQ = db.questions[qIndex];
+  
+  const mergedQ = {
+    ...existingQ,
+    ...updatedData,
+    id: qId, // preserve original ID
+    lastEditedAt: new Date().toISOString()
+  };
+
+  db.questions[qIndex] = mergedQ;
+  saveDatabase(db);
+
+  let sheetSynced = false;
+  let syncError = null;
+
+  // Attempt Google Apps Script Webhook Sync if URL configured
+  const appsScriptUrl = db.settings && db.settings.googleAppsScriptUrl;
+  if (appsScriptUrl && appsScriptUrl.trim()) {
+    try {
+      const isPyq = Boolean(mergedQ.exam && mergedQ.exam.trim());
+      const response = await fetch(appsScriptUrl.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_QUESTION',
+          sheetType: isPyq ? 'pyq' : 'subject',
+          question: mergedQ
+        })
+      });
+      if (response.ok) {
+        sheetSynced = true;
+      } else {
+        syncError = `HTTP ${response.status}`;
+      }
+    } catch (err: any) {
+      console.error("Google Apps Script Sync error:", err);
+      syncError = err.message || "Failed to trigger Apps Script Webhook";
+    }
+  }
+
+  res.json({
+    success: true,
+    message: "Question updated successfully",
+    question: mergedQ,
+    sheetSynced,
+    syncError
+  });
+});
+
+// Manual trigger to sync a question or list of questions to Google Apps Script
+app.post('/api/sync-question-to-sheet', async (req, res) => {
+  const db = loadDatabase();
+  const appsScriptUrl = (db.settings && db.settings.googleAppsScriptUrl) || req.body.appsScriptUrl;
+
+  if (!appsScriptUrl || !appsScriptUrl.trim()) {
+    return res.status(400).json({ error: "Google Apps Script URL is not configured in Settings." });
+  }
+
+  const { question, questions } = req.body;
+  const itemsToSync = questions || (question ? [question] : []);
+
+  if (!itemsToSync.length) {
+    return res.status(400).json({ error: "No question provided to sync." });
+  }
+
+  try {
+    let successCount = 0;
+    for (const q of itemsToSync) {
+      const isPyq = Boolean(q.exam && q.exam.trim());
+      const response = await fetch(appsScriptUrl.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_QUESTION',
+          sheetType: isPyq ? 'pyq' : 'subject',
+          question: q
+        })
+      });
+      if (response.ok) {
+        successCount++;
+      }
+    }
+
+    res.json({
+      success: true,
+      syncedCount: successCount,
+      totalCount: itemsToSync.length,
+      message: `Successfully synced ${successCount} question(s) to Google Sheets!`
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to reach Google Apps Script Webhook." });
+  }
+});
+
 // Delete single question
 app.delete('/api/questions/:id', (req, res) => {
   const db = loadDatabase();
@@ -482,7 +602,7 @@ app.post('/api/questions/replace', (req, res) => {
 // Get settings
 app.get('/api/settings', (req, res) => {
   const db = loadDatabase();
-  res.json(db.settings || { spreadsheetId: "", spreadsheetIdPyq: "", spreadsheetIdSubject: "", spreadsheetIdCurrentAffairs: "", adminPasscode: "Kitkatisbest" });
+  res.json(db.settings || { spreadsheetId: "", spreadsheetIdPyq: "", spreadsheetIdSubject: "", spreadsheetIdCurrentAffairs: "", googleAppsScriptUrl: "", adminPasscode: "Kitkatisbest" });
 });
 
 // Update settings
@@ -1340,7 +1460,10 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      maxAge: '1d',
+      etag: true
+    }));
     // SPA fallback
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
