@@ -16,6 +16,7 @@ export interface Question {
   year?: number; // e.g., 2023 (optional)
   explanation_hi?: string; // Hindi explanation
   explanation_en?: string; // English explanation
+  is_deleted?: boolean; // True if question was invalidated/deleted by board (* marked in sheet)
 }
 
 export interface Quiz {

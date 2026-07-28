@@ -79,10 +79,6 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
           
           {/* Left Column Text & CTA */}
           <div className="lg:col-span-7 space-y-6">
-            <span className="text-xs font-black uppercase tracking-widest text-emerald-200 bg-emerald-950/60 px-4 py-1.5 rounded-full backdrop-blur-md inline-block border border-emerald-600/40">
-              TEST ARENA
-            </span>
-            
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-tight text-white">
               Crack Your Exam <br />
               <span className="text-yellow-300">With Smart Practice</span>

@@ -22,195 +22,9 @@ if (!fs.existsSync(DATA_DIR)) {
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 // Initial seed data
-const initialQuestions = [
-  {
-    id: "q1",
-    text_hi: "छत्तीसगढ़ के किस जिले में 'तातापानी' गरम पानी का चश्मा स्थित है?",
-    text_en: "In which district of Chhattisgarh is 'Tatapani' hot water spring located?",
-    options_hi: ["सरगुजा", "बलरामपुर", "सूरजपुर", "जशपुर", "कांकेर"],
-    options_en: ["Surguja", "Balrampur", "Surajpur", "Jashpur", "Kanker"],
-    correctAnswer: 1, // Balrampur
-    subject: "Chhattisgarh General Knowledge",
-    topic: "CG Geography & Rivers",
-    exam: "CGPSC Prelims",
-    year: 2022,
-    explanation_hi: "तातापानी बलरामपुर जिले में स्थित है। यह अपने गर्म पानी के चश्मे (Hydrogen sulfide rich hot spring) के लिए प्रसिद्ध है, जिसमें वर्ष भर गर्म पानी बहता रहता है।",
-    explanation_en: "Tatapani is located in Balrampur district. It is famous for its natural hot springs (rich in Hydrogen sulfide), flowing continuously throughout the year."
-  },
-  {
-    id: "q2",
-    text_hi: "चक्रधर समारोह छत्तीसगढ़ के किस शहर में आयोजित किया जाता है?",
-    text_en: "Chakradhar Samaroh is organized in which city of Chhattisgarh?",
-    options_hi: ["बिलासपुर", "रायपुर", "रायगढ़", "खैरागढ़", "जगदलपुर"],
-    options_en: ["Bilaspur", "Raipur", "Raigarh", "Khairagarh", "Jagdalpur"],
-    correctAnswer: 2, // Raigarh
-    subject: "Chhattisgarh General Knowledge",
-    topic: "CG Tribes & Culture",
-    exam: "CGPSC Prelims",
-    year: 2023,
-    explanation_hi: "रायगढ़ में गणेश चतुर्थी के अवसर पर हर साल चक्रधर समारोह आयोजित किया जाता है। यह संगीत सम्राट राजा चक्रधर सिंह की स्मृति में मनाया जाता है।",
-    explanation_en: "Chakradhar Samaroh is organized annually in Raigarh on the occasion of Ganesh Chaturthi. It is held in memory of the great music maestro King Chakradhar Singh."
-  },
-  {
-    id: "q3",
-    text_hi: "छत्तीसगढ़ की सबसे बड़ी जनजाति कौन सी है?",
-    text_en: "Which is the largest tribe of Chhattisgarh?",
-    options_hi: ["उरांव", "गोंड", "बैगा", "हलबा", "कवर"],
-    options_en: ["Oraon", "Gond", "Baiga", "Halba", "Kawar"],
-    correctAnswer: 1, // Gond
-    subject: "Chhattisgarh General Knowledge",
-    topic: "CG Tribes & Culture",
-    exam: "CGPSC Prelims",
-    year: 2021,
-    explanation_hi: "गोंड छत्तीसगढ़ की सबसे बड़ी जनजाति है। छत्तीसगढ़ की कुल जनजातीय जनसंख्या में इनका प्रतिशत सर्वाधिक है।",
-    explanation_en: "Gond is the largest tribe in Chhattisgarh. They constitute the highest percentage among the total tribal population of the state."
-  },
-  {
-    id: "q4",
-    text_hi: "छत्तीसगढ़ राज्य का गठन किस वर्ष हुआ था?",
-    text_en: "In which year was the state of Chhattisgarh formed?",
-    options_hi: ["1998", "2000", "2001", "2002", "1995"],
-    options_en: ["1998", "2000", "2001", "2002", "1995"],
-    correctAnswer: 1, // 2000
-    subject: "Chhattisgarh General Knowledge",
-    topic: "CG History & Dynasty",
-    exam: "CGPSC Prelims",
-    year: 2018,
-    explanation_hi: "छत्तीसगढ़ राज्य का गठन 1 नवंबर 2000 को मध्य प्रदेश से अलग होकर भारत के 26वें राज्य के रूप में हुआ था।",
-    explanation_en: "The state of Chhattisgarh was carved out of Madhya Pradesh on 1 November 2000, becoming the 26th state of India."
-  },
-  {
-    id: "q5",
-    text_hi: "भारतीय संविधान के किस अनुच्छेद में 'समानता का अधिकार' वर्णित है?",
-    text_en: "Which Article of the Indian Constitution describes the 'Right to Equality'?",
-    options_hi: ["अनुच्छेद 12", "अनुच्छेद 14", "अनुच्छेद 19", "अनुच्छेद 21", "अनुच्छेद 32"],
-    options_en: ["Article 12", "Article 14", "Article 19", "Article 21", "Article 32"],
-    correctAnswer: 1, // Article 14
-    subject: "Indian Polity & Constitution",
-    topic: "Fundamental Rights & Duties",
-    exam: "CGPSC Prelims",
-    year: 2020,
-    explanation_hi: "भारतीय संविधान के अनुच्छेद 14 से 18 तक समानता का अधिकार दिया गया है। अनुच्छेद 14 कानून के समक्ष समानता सुनिश्चित करता है।",
-    explanation_en: "The Right to Equality is guaranteed under Articles 14 to 18 of the Indian Constitution. Article 14 guarantees equality before the law."
-  },
-  {
-    id: "q6",
-    text_hi: "छत्तीसगढ़ में 'पंचायती राज अधिनियम' कब लागू हुआ था?",
-    text_en: "When was the 'Panchayati Raj Act' implemented in Chhattisgarh?",
-    options_hi: ["1993", "1994", "2000", "2001", "1995"],
-    options_en: ["1993", "1994", "2000", "2001", "1995"],
-    correctAnswer: 1, // 1994
-    subject: "Chhattisgarh General Knowledge",
-    topic: "Panchayati Raj in CG",
-    exam: "CGPSC Prelims",
-    year: 2019,
-    explanation_hi: "छत्तीसगढ़ में मध्य प्रदेश पंचायती राज अधिनियम 1993 को ही अनुकूलन आदेश 2001 के तहत अपनाया गया है। मूल अधिनियम मध्य प्रदेश में 1994 में लागू हुआ था।",
-    explanation_en: "In Chhattisgarh, the Madhya Pradesh Panchayati Raj Act 1993 was adopted under the adaptation order 2001. The original act came into effect in 1994."
-  },
-  {
-    id: "q7",
-    text_hi: "छत्तीसगढ़ के प्रथम शहीद वीर नारायण सिंह किस जमींदारी के थे?",
-    text_en: "To which zamindari did the first martyr of Chhattisgarh, Veer Narayan Singh, belong?",
-    options_hi: ["सोनाखान", "धमतरी", "सक्ती", "सारंगढ़", "गुंडरदेही"],
-    options_en: ["Sonakhan", "Dhamtari", "Sakti", "Sarangarh", "Gunderdehi"],
-    correctAnswer: 0, // Sonakhan
-    subject: "Chhattisgarh General Knowledge",
-    topic: "CG History & Dynasty",
-    exam: "CGPSC Prelims",
-    year: 2022,
-    explanation_hi: "वीर नारायण सिंह सोनाखान के जमींदार थे। उन्होंने 1857 के स्वतंत्रता संग्राम में छत्तीसगढ़ का नेतृत्व किया और उन्हें छत्तीसगढ़ का प्रथम शहीद माना जाता है। उन्हें 10 दिसंबर 1857 को रायपुर के जयस्तंभ चौक पर फांसी दी गई थी।",
-    explanation_en: "Veer Narayan Singh was the landlord of Sonakhan. He led the 1857 freedom struggle in Chhattisgarh and is considered the state's first martyr. He was executed at Jaistambh Chowk, Raipur, on 10 December 1857."
-  },
-  {
-    id: "q8",
-    text_hi: "सिंधु घाटी सभ्यता का प्रसिद्ध बंदरगाह 'लोथल' कहाँ स्थित है?",
-    text_en: "Where is 'Lothal', the famous port of Indus Valley Civilization, located?",
-    options_hi: ["राजस्थान", "पंजाब", "गुजरात", "हरियाणा", "उत्तर प्रदेश"],
-    options_en: ["Rajasthan", "Punjab", "Gujarat", "Haryana", "Uttar Pradesh"],
-    correctAnswer: 2, // Gujarat
-    subject: "Indian History",
-    topic: "Indus Valley Civilization",
-    exam: "CGPSC Prelims",
-    year: 2021,
-    explanation_hi: "लोथल गुजरात के भाल क्षेत्र में स्थित सिंधु घाटी सभ्यता का एकमात्र प्राचीन बंदरगाह है। इसकी खोज 1954 में एस. आर. राव ने की थी।",
-    explanation_en: "Lothal is the ancient port city of the Indus Valley Civilization, located in the Bhal region of Gujarat. It was discovered in 1954 by S. R. Rao."
-  },
-  {
-    id: "q9",
-    text_hi: "छत्तीसगढ़ राज्य की सीमा कितने राज्यों को स्पर्श करती है?",
-    text_en: "The boundary of Chhattisgarh state touches how many states?",
-    options_hi: ["5", "6", "7", "8", "9"],
-    options_en: ["5", "6", "7", "8", "9"],
-    correctAnswer: 2, // 7 states
-    subject: "Chhattisgarh General Knowledge",
-    topic: "CG Geography & Rivers",
-    exam: "CGPSC Prelims",
-    year: 2023,
-    explanation_hi: "छत्तीसगढ़ की सीमा भारत के 7 राज्यों को स्पर्श करती है: उत्तर प्रदेश, झारखंड, ओडिशा, आंध्र प्रदेश, तेलंगाना, महाराष्ट्र और मध्य प्रदेश।",
-    explanation_en: "Chhattisgarh borders 7 states of India: Uttar Pradesh, Jharkhand, Odisha, Andhra Pradesh, Telangana, Maharashtra, and Madhya Pradesh."
-  },
-  {
-    id: "q10",
-    text_hi: "भारतीय संविधान का 'मैग्ना कार्टा' किस भाग को कहा जाता है?",
-    text_en: "Which part of the Indian Constitution is called the 'Magna Carta'?",
-    options_hi: ["भाग II", "भाग III", "भाग IV", "भाग IVA", "भाग V"],
-    options_en: ["Part II", "Part III", "Part IV", "Part IVA", "Part V"],
-    correctAnswer: 1, // Part III
-    subject: "Indian Polity & Constitution",
-    topic: "Fundamental Rights & Duties",
-    exam: "CGPSC Prelims",
-    year: 2019,
-    explanation_hi: "संविधान के भाग III (अनुच्छेद 12 से 35) को भारत का मैग्ना कार्टा कहा जाता है, जिसमें मौलिक अधिकारों का उल्लेख है।",
-    explanation_en: "Part III of the Constitution (Articles 12 to 35) is termed the Magna Carta of India. It contains the Fundamental Rights."
-  }
-];
-
-const initialQuizzes = [
-  {
-    id: "quiz-pyq-cggk",
-    title: "छत्तीसगढ़ सामान्य ज्ञान (CG GK) - PYQ",
-    description: "सीजीपीएससी प्रारंभिक परीक्षाओं में पूछे गए छत्तीसगढ़ सामान्य ज्ञान के महत्वपूर्ण प्रश्न।",
-    type: "pyq",
-    subject: "Chhattisgarh General Knowledge",
-    durationMinutes: 10,
-    questionIds: ["q1", "q2", "q3", "q4", "q6", "q7", "q9"]
-  },
-  {
-    id: "quiz-pyq-full-mock",
-    title: "CGPSC प्रीलिम्स - मिनी मॉक टेस्ट (Bilingual)",
-    description: "विगत वर्षों के इतिहास, भूगोल, राजव्यवस्था और छत्तीसगढ़ जीके के प्रश्नों का उत्कृष्ट संकलन।",
-    type: "pyq",
-    durationMinutes: 15,
-    questionIds: ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10"]
-  }
-];
-
-// Seed initial attempts so Sourav Patel starts with a high-fidelity diagnostic dashboard
-const initialAttempts = [
-  {
-    id: "att-1",
-    quizId: "quiz-pyq-cggk",
-    quizTitle: "छत्तीसगढ़ सामान्य ज्ञान (CG GK) - PYQ",
-    quizType: "pyq",
-    userId: "user-sourav",
-    timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
-    score: 8.68, // 5 correct (+10), 2 incorrect (-1.32)
-    totalQuestions: 7,
-    correctCount: 5,
-    wrongCount: 2,
-    skippedCount: 0,
-    answers: {
-      "q1": 1, // correct
-      "q2": 1, // wrong (selected Raipur instead of Raigarh)
-      "q3": 1, // correct
-      "q4": 1, // correct
-      "q6": 2, // wrong (selected 2000 instead of 1994)
-      "q7": 0, // correct
-      "q9": 2  // correct
-    },
-    durationSeconds: 240
-  }
-];
+const initialQuestions: any[] = [];
+const initialQuizzes: any[] = [];
+const initialAttempts: any[] = [];
 
 const initialCurrentAffairs = [
   {
@@ -463,6 +277,93 @@ app.post('/api/questions', (req, res) => {
   res.status(201).json(newQuestion);
 });
 
+// Helper to get correct Google Apps Script Webhook URL for a question
+function getAppsScriptUrlForQuestion(db: any, q?: any): string {
+  const isPyq = q ? Boolean(q.exam && String(q.exam).trim()) : false;
+  const pyqUrl = db.settings?.googleAppsScriptUrlPyq?.trim();
+  const subjectUrl = db.settings?.googleAppsScriptUrlSubject?.trim();
+  const generalUrl = db.settings?.googleAppsScriptUrl?.trim();
+
+  if (isPyq) {
+    return pyqUrl || generalUrl || subjectUrl || '';
+  } else {
+    return subjectUrl || generalUrl || pyqUrl || '';
+  }
+}
+
+// Helper to post to Google Apps Script Webhook
+async function callGoogleAppsScriptWebhook(targetUrl: string, payload: any): Promise<{ success: boolean; error?: string }> {
+  try {
+    const bodyString = JSON.stringify(payload);
+    
+    // Execute POST with redirect: 'follow' (Node fetch automatically follows 302 to script.googleusercontent.com)
+    let response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: bodyString,
+      redirect: 'follow'
+    });
+
+    if (!response.ok) {
+      return { success: false, error: `Google Apps Script returned HTTP ${response.status}` };
+    }
+
+    const resText = await response.text();
+    try {
+      const resJson = JSON.parse(resText);
+      if (resJson.status === 'success' || resJson.status === 'ok') {
+        return { success: true };
+      } else if (resJson.status === 'not_found') {
+        return { success: false, error: "गूगल शीट में यह प्रश्न (ID/टेक्स्ट) नहीं मिला।" };
+      } else {
+        return { success: false, error: resJson.error || "गूगल एप्स स्क्रिप्ट से प्रतिक्रिया में त्रुटि मिली।" };
+      }
+    } catch (parseErr) {
+      if (resText.includes('HTML') || resText.includes('<!DOCTYPE') || resText.includes('<html')) {
+        return { success: false, error: "Apps Script से HTML मिला। वेब एप 'Deploy -> New deployment -> Who has access: Anyone' सेट किया गया होना चाहिए।" };
+      }
+      if (resText.toLowerCase().includes('success') || resText.toLowerCase().includes('ok')) {
+        return { success: true };
+      }
+      return { success: false, error: `प्रतिक्रिया: ${resText.substring(0, 100)}` };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message || "Apps Script वेबहुक तक पहुँचने में विफल।" };
+  }
+}
+
+// Create single question
+app.post('/api/questions', async (req, res) => {
+  const db = loadDatabase();
+  const newQuestion = req.body;
+  if (!newQuestion.id) {
+    newQuestion.id = "q-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5);
+  }
+  db.questions = db.questions || [];
+  db.questions.push(newQuestion);
+  saveDatabase(db);
+
+  let sheetSynced = false;
+  let syncError: string | null = null;
+  const targetAppsScriptUrl = getAppsScriptUrlForQuestion(db, newQuestion);
+  if (targetAppsScriptUrl) {
+    const isPyq = Boolean(newQuestion.exam && String(newQuestion.exam).trim());
+    const syncRes = await callGoogleAppsScriptWebhook(targetAppsScriptUrl, {
+      action: 'UPDATE_QUESTION',
+      sheetType: isPyq ? 'pyq' : 'subject',
+      question: newQuestion
+    });
+    sheetSynced = syncRes.success;
+    syncError = syncRes.error || null;
+  }
+
+  res.status(201).json({
+    ...newQuestion,
+    sheetSynced,
+    syncError
+  });
+});
+
 // Update single question by ID
 app.put('/api/questions/:id', async (req, res) => {
   const db = loadDatabase();
@@ -488,31 +389,22 @@ app.put('/api/questions/:id', async (req, res) => {
   saveDatabase(db);
 
   let sheetSynced = false;
-  let syncError = null;
+  let syncError: string | null = null;
 
   // Attempt Google Apps Script Webhook Sync if URL configured
-  const appsScriptUrl = db.settings && db.settings.googleAppsScriptUrl;
-  if (appsScriptUrl && appsScriptUrl.trim()) {
-    try {
-      const isPyq = Boolean(mergedQ.exam && mergedQ.exam.trim());
-      const response = await fetch(appsScriptUrl.trim(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'UPDATE_QUESTION',
-          sheetType: isPyq ? 'pyq' : 'subject',
-          question: mergedQ
-        })
-      });
-      if (response.ok) {
-        sheetSynced = true;
-      } else {
-        syncError = `HTTP ${response.status}`;
-      }
-    } catch (err: any) {
-      console.error("Google Apps Script Sync error:", err);
-      syncError = err.message || "Failed to trigger Apps Script Webhook";
-    }
+  const isPyq = Boolean(mergedQ.exam && String(mergedQ.exam).trim());
+  const targetAppsScriptUrl = getAppsScriptUrlForQuestion(db, mergedQ);
+
+  if (targetAppsScriptUrl) {
+    const syncRes = await callGoogleAppsScriptWebhook(targetAppsScriptUrl, {
+      action: 'UPDATE_QUESTION',
+      sheetType: isPyq ? 'pyq' : 'subject',
+      question: mergedQ,
+      oldQuestion: existingQ
+    });
+
+    sheetSynced = syncRes.success;
+    syncError = syncRes.error || null;
   }
 
   res.json({
@@ -527,62 +419,122 @@ app.put('/api/questions/:id', async (req, res) => {
 // Manual trigger to sync a question or list of questions to Google Apps Script
 app.post('/api/sync-question-to-sheet', async (req, res) => {
   const db = loadDatabase();
-  const appsScriptUrl = (db.settings && db.settings.googleAppsScriptUrl) || req.body.appsScriptUrl;
-
-  if (!appsScriptUrl || !appsScriptUrl.trim()) {
-    return res.status(400).json({ error: "Google Apps Script URL is not configured in Settings." });
-  }
-
-  const { question, questions } = req.body;
+  const { question, questions, appsScriptUrl: reqUrl } = req.body;
   const itemsToSync = questions || (question ? [question] : []);
 
   if (!itemsToSync.length) {
-    return res.status(400).json({ error: "No question provided to sync." });
+    return res.status(400).json({ error: "सिंक करने के लिए कोई प्रश्न नहीं मिला।" });
   }
 
   try {
     let successCount = 0;
+    let lastError: string | null = null;
+
     for (const q of itemsToSync) {
-      const isPyq = Boolean(q.exam && q.exam.trim());
-      const response = await fetch(appsScriptUrl.trim(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'UPDATE_QUESTION',
-          sheetType: isPyq ? 'pyq' : 'subject',
-          question: q
-        })
+      const targetUrl = reqUrl?.trim() || getAppsScriptUrlForQuestion(db, q);
+      if (!targetUrl) {
+        lastError = "गूगल एप्स स्क्रिप्ट URL सेटिंग्स में दर्ज नहीं है।";
+        continue;
+      }
+
+      const isPyq = Boolean(q.exam && String(q.exam).trim());
+      const resSync = await callGoogleAppsScriptWebhook(targetUrl, {
+        action: 'UPDATE_QUESTION',
+        sheetType: isPyq ? 'pyq' : 'subject',
+        question: q
       });
-      if (response.ok) {
+
+      if (resSync.success) {
         successCount++;
+      } else if (resSync.error) {
+        lastError = resSync.error;
       }
     }
 
-    res.json({
-      success: true,
-      syncedCount: successCount,
-      totalCount: itemsToSync.length,
-      message: `Successfully synced ${successCount} question(s) to Google Sheets!`
-    });
+    if (successCount > 0) {
+      res.json({
+        success: true,
+        syncedCount: successCount,
+        totalCount: itemsToSync.length,
+        message: `सफलतापूर्वक ${successCount} प्रश्न गूगल शीट में सिंक/अपडेट हो गए!`
+      });
+    } else {
+      res.status(400).json({
+        error: lastError || "गूगल शीट में डेटा सिंक नहीं हो सका। कृपया Webhook URL जांचें।"
+      });
+    }
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to reach Google Apps Script Webhook." });
+    res.status(500).json({ error: err.message || "Apps Script वेबहुक तक पहुँचने में विफल।" });
+  }
+});
+
+// Full Bulk Sync endpoint to push all questions directly to Google Apps Script
+app.post('/api/sync-all-to-sheet', async (req, res) => {
+  const db = loadDatabase();
+  const { sheetType = 'pyq' } = req.body;
+  const isPyq = sheetType === 'pyq';
+
+  const dummyQ = { exam: isPyq ? 'PYQ' : '' };
+  const targetAppsScriptUrl = getAppsScriptUrlForQuestion(db, dummyQ);
+
+  if (!targetAppsScriptUrl) {
+    return res.status(400).json({ error: "कृपया सेटिंग्स में गूगल एप्स स्क्रिप्ट वेबहुक URL सहेजें।" });
+  }
+
+  const allQuestions = db.questions || [];
+  const questionsToSync = allQuestions.filter((q: any) => {
+    if (isPyq) return Boolean(q.exam && String(q.exam).trim());
+    return !q.exam || !q.exam.trim();
+  });
+
+  if (questionsToSync.length === 0) {
+    return res.status(400).json({ error: "गूगल शीट में सिंक करने के लिए कोई प्रश्न नहीं मिले।" });
+  }
+
+  const syncRes = await callGoogleAppsScriptWebhook(targetAppsScriptUrl, {
+    action: 'SYNC_ALL_QUESTIONS',
+    sheetType: isPyq ? 'pyq' : 'subject',
+    questions: questionsToSync
+  });
+
+  if (syncRes.success) {
+    return res.json({
+      success: true,
+      count: questionsToSync.length,
+      message: `सफलतापूर्वक सभी ${questionsToSync.length} प्रश्नों को गूगल शीट में सिंक/अपडेट कर दिया गया!`
+    });
+  } else {
+    return res.status(500).json({
+      error: syncRes.error || "गूगल शीट में डेटा पुश करने में विफलता।"
+    });
   }
 });
 
 // Delete single question
-app.delete('/api/questions/:id', (req, res) => {
+app.delete('/api/questions/:id', async (req, res) => {
   const db = loadDatabase();
   const qId = req.params.id;
   db.questions = db.questions || [];
   
-  const initialLength = db.questions.length;
-  db.questions = db.questions.filter((q: any) => q.id !== qId);
-  
-  if (db.questions.length === initialLength) {
+  const targetQ = db.questions.find((q: any) => q.id === qId);
+  if (!targetQ) {
     return res.status(404).json({ error: "Question not found" });
   }
-  
+
+  db.questions = db.questions.filter((q: any) => q.id !== qId);
   saveDatabase(db);
+
+  // Sync deletion to Google Sheet if Webhook configured
+  const targetAppsScriptUrl = getAppsScriptUrlForQuestion(db, targetQ);
+  if (targetAppsScriptUrl) {
+    const isPyq = Boolean(targetQ.exam && String(targetQ.exam).trim());
+    callGoogleAppsScriptWebhook(targetAppsScriptUrl, {
+      action: 'UPDATE_QUESTION',
+      sheetType: isPyq ? 'pyq' : 'subject',
+      question: { ...targetQ, is_deleted: true, text_hi: (targetQ.text_hi || '') + ' (DELETED)' }
+    }).catch(() => {});
+  }
+
   res.json({ message: "Question deleted successfully", id: qId });
 });
 
@@ -630,6 +582,13 @@ function parseCorrectAnswerServer(rawVal: any, options: string[]): number {
   if (rawVal === undefined || rawVal === null) return 0;
   const valStr = String(rawVal).trim();
   if (valStr === '') return 0;
+
+  if (
+    valStr.includes('*') ||
+    /^(star|vifopit|wilopit|deleted|invalidated|cancelled|विलोपित|स्टार)$/i.test(valStr)
+  ) {
+    return -1;
+  }
 
   if (/^[a-eA-E]$/.test(valStr)) {
     return valStr.toUpperCase().charCodeAt(0) - 65;
@@ -774,7 +733,14 @@ function processParsedRows(rawJsonRows: any[], sheetType: string, action: string
     const options_hi = [opt1, opt2, opt3, opt4, opt5].filter(Boolean);
 
     const ansRaw = getVal(['correctAnswer', 'Correct Answer', 'Answer', 'correct_answer', 'CorrectAnswer', 'उत्तर', 'सही उत्तर']) || '1';
-    const correctAnswer = parseCorrectAnswerServer(ansRaw, options_hi);
+    const deletedRaw = getVal(['is_deleted', 'is_invalidated', 'vifopit', 'wilopit', 'is_vifopit', 'विलोपित', 'deleted', 'cancelled', 'is_deleted_question']);
+
+    const isDeletedQuestion = Boolean(
+      (ansRaw && (ansRaw.includes('*') || /^(star|vifopit|wilopit|deleted|invalidated|cancelled|विलोपित|स्टार)$/i.test(ansRaw.trim()))) ||
+      (deletedRaw && (deletedRaw.includes('*') || /^(true|1|yes|vifopit|wilopit|deleted|invalidated|cancelled|विलोपित|हाँ|star)$/i.test(deletedRaw.trim())))
+    );
+
+    const correctAnswer = isDeletedQuestion ? -1 : parseCorrectAnswerServer(ansRaw, options_hi);
 
     let defaultSub = 'Chhattisgarh General Knowledge';
     if (sheetType === 'subject') defaultSub = 'Chhattisgarh General Knowledge';
@@ -788,13 +754,18 @@ function processParsedRows(rawJsonRows: any[], sheetType: string, action: string
     const explanation_hi = getVal(['explanation_hi', 'Explanation (HI)', 'Explanation', 'व्याख्या', 'व्याख्या (हिन्दी)']);
     const explanation_en = getVal(['explanation_en', 'Explanation (EN)', 'व्याख्या (अंग्रेजी)']);
 
+    const idVal = getVal(['id', 'ID', 'Id', 'S.No', 'Sr.No', 's_no', 'sr_no']);
+    const idToUse = idVal ? String(idVal).trim() : `q-sheet-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`;
+
     return {
-      id: `q-sheet-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      id: idToUse,
+      sheetRowNumber: idx + 2,
       text_hi: String(textHi).trim(),
       text_en: String(textEn).trim(),
       options_hi,
       options_en: [],
       correctAnswer,
+      is_deleted: isDeletedQuestion,
       subject: String(subject).trim(),
       topic: String(topic).trim(),
       exam: String(exam || '').trim(),
@@ -1449,11 +1420,10 @@ app.get('/sitemap.xml', (req, res) => {
 // Setup Vite & Static Assets serving
 async function startServer() {
   const distPath = path.join(process.cwd(), 'dist');
-  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
-  const isProduction = process.env.NODE_ENV === "production" || hasDist;
+  const isProduction = process.env.NODE_ENV === "production";
 
   if (!isProduction) {
-    const { createServer: createViteServer } = require('vite');
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
