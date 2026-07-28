@@ -294,6 +294,7 @@ function getAppsScriptUrlForQuestion(db: any, q?: any): string {
 // Helper to post to Google Apps Script Webhook
 async function callGoogleAppsScriptWebhook(targetUrl: string, payload: any): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log(`[GoogleSheetSync] Sending POST request to Apps Script Webhook: ${targetUrl.substring(0, 45)}...`);
     const bodyString = JSON.stringify(payload);
     
     // Execute POST with redirect: 'follow' (Node fetch automatically follows 302 to script.googleusercontent.com)
@@ -305,10 +306,12 @@ async function callGoogleAppsScriptWebhook(targetUrl: string, payload: any): Pro
     });
 
     if (!response.ok) {
+      console.error(`[GoogleSheetSync] Error HTTP ${response.status} from Google Apps Script`);
       return { success: false, error: `Google Apps Script returned HTTP ${response.status}` };
     }
 
     const resText = await response.text();
+    console.log(`[GoogleSheetSync] Response from Google Apps Script:`, resText.substring(0, 150));
     try {
       const resJson = JSON.parse(resText);
       if (resJson.status === 'success' || resJson.status === 'ok') {
@@ -328,6 +331,7 @@ async function callGoogleAppsScriptWebhook(targetUrl: string, payload: any): Pro
       return { success: false, error: `प्रतिक्रिया: ${resText.substring(0, 100)}` };
     }
   } catch (err: any) {
+    console.error(`[GoogleSheetSync] Exception calling Apps Script Webhook:`, err.message);
     return { success: false, error: err.message || "Apps Script वेबहुक तक पहुँचने में विफल।" };
   }
 }
