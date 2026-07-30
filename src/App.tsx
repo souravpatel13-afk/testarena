@@ -18,7 +18,8 @@ import {
   Mail,
   Home as HomeIcon,
   Newspaper,
-  LogOut
+  LogOut,
+  Sparkles
 } from 'lucide-react';
 import { Question, Quiz, User, CurrentAffairsItem, ExamInfo } from './types';
 import Home from './components/Home';
@@ -26,6 +27,7 @@ import Dashboard from './components/Dashboard';
 import PyqSelector from './components/PyqSelector';
 import SubjectSelector from './components/SubjectSelector';
 import CurrentAffairsSelector from './components/CurrentAffairsSelector';
+import DailyPractice from './components/DailyPractice';
 import AboutUs from './components/AboutUs';
 import ContactUs from './components/ContactUs';
 import QuizRunner from './components/QuizRunner';
@@ -37,7 +39,7 @@ import { auth, logout } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'exam-info' | 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'privacy' | 'terms' | 'disclaimer'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'daily-practice' | 'exam-info' | 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'privacy' | 'terms' | 'disclaimer'>('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [fbUser, setFbUser] = useState<FirebaseUser | null>(null);
 
@@ -131,7 +133,7 @@ export default function App() {
     loadData();
   };
 
-  const handleFooterNav = (tab: 'home' | 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'privacy' | 'terms' | 'disclaimer') => {
+  const handleFooterNav = (tab: 'home' | 'daily-practice' | 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'privacy' | 'terms' | 'disclaimer') => {
     setActiveTab(tab);
     setIsQuizRunning(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -172,6 +174,7 @@ export default function App() {
   // Header Nav Lists
   const allNavigationItems = [
     { id: 'home', label: 'Home', icon: HomeIcon },
+    { id: 'daily-practice', label: 'Daily Practice', icon: Sparkles },
     { id: 'exam-info', label: 'Exam Info', icon: GraduationCap },
     { id: 'pyqs', label: 'PYQs Practice', icon: History },
     { id: 'subjects', label: 'Subject Tests', icon: BookOpen },
@@ -367,6 +370,15 @@ export default function App() {
                 quizzesCount={quizzes.length}
                 exams={exams}
                 questions={questions}
+              />
+            )}
+
+            {activeTab === 'daily-practice' && (
+              <DailyPractice 
+                onBackToHome={() => {
+                  setActiveTab('home');
+                  setIsQuizRunning(false);
+                }}
               />
             )}
 

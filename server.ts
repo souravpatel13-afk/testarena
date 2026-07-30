@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import * as XLSX from 'xlsx';
 import compression from 'compression';
+import { createServer as createViteServer } from 'vite';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -151,6 +152,162 @@ const initialExamInfo = [
   }
 ];
 
+const initialDailyPractice = [
+  {
+    id: "dp-2026-07-29",
+    date: "2026-07-29",
+    title: "डेली प्रैक्टिस सेट - 29 जुलाई 2026 (CGPSC/व्यापमं स्पेशल 20 प्रश्न)",
+    description: "छत्तीसगढ़ राज्य सामान्य ज्ञान, समसामयिकी (Current Affairs), भारतीय संविधान व भूगोल के 20 अति-महत्वपूर्ण प्रश्न।",
+    subject: "छत्तीसगढ़ सामान्य ज्ञान एवं समसामयिकी",
+    targetExam: "CGPSC Prelims / CG Vyapam / CG Police",
+    durationMinutes: 20,
+    questions: [
+      {
+        id: "dpq-1",
+        questionHtml: "<b>प्रश्न 1:</b> छत्तीसगढ़ में <i>'भारत छोड़ो आंदोलन'</i> (1942) के दौरान रायपुर में <b>'डायनामाइट कांड'</b> के प्रमुख योजनाकार कौन थे?",
+        optionsHtml: ["परसराम सोनी", "ईश्वरी चरण शुक्ल", "ठाकुर प्यारेलाल सिंह", "बिलख नारायण अग्रवाल"],
+        correctAnswer: 1,
+        explanationHtml: "<b>विस्तृत समाधान:</b><br/>रायपुर डायनामाइट कांड 1942 में हुआ था। इसके मुख्य योजनाकार <b>ईश्वरी चरण शुक्ल</b> थे। इसमें जय नारायण पांडे, बिलख नारायण अग्रवाल, परसराम सोनी एवं अन्य क्रांतिकारी भी शामिल थे। इसका उद्देश्य रायपुर जेल की दीवार तोड़कर क्रांतिकारियों को छुड़ाना था।"
+      },
+      {
+        id: "dpq-2",
+        questionHtml: "<b>प्रश्न 2:</b> छत्तीसगढ़ राज्य के किस जिले में प्रसिद्ध <i>'तीरथगढ़ जलप्रपात'</i> स्थित है?",
+        optionsHtml: ["कांकेर", "बस्तर", "दंतेवाड़ा", "सुकमा"],
+        correctAnswer: 1,
+        explanationHtml: "<b>विस्तृत समाधान:</b><br/>तीरथगढ़ जलप्रपात छत्तीसगढ़ के <b>बस्तर जिले</b> में कांगेर घाटी राष्ट्रीय उद्यान के पास <b>मुंगाबहार नदी</b> पर स्थित है। यह लगभग 300 फीट ऊंचा एक आकर्षक सीढ़ीदार प्रपात है।"
+      },
+      {
+        id: "dpq-3",
+        questionHtml: "<b>प्रश्न 3:</b> छत्तीसगढ़ की निम्नलिखित जनजातियों और उनके मुख्य लोक नृत्य का सही मिलान करें:<br/><table class='w-full border text-xs my-2 bg-emerald-50/50'><tr><th class='border p-1 bg-emerald-100/80'>जनजाति</th><th class='border p-1 bg-emerald-100/80'>लोक नृत्य</th></tr><tr><td class='border p-1'>1. माड़िया</td><td class='border p-1'>A. गौर नृत्य</td></tr><tr><td class='border p-1'>2. उरांव</td><td class='border p-1'>B. सरहुल नृत्य</td></tr><tr><td class='border p-1'>3. बैगा</td><td class='border p-1'>C. बिलमा / परधोनी</td></tr></table>",
+        optionsHtml: ["1-A, 2-B, 3-C", "1-B, 2-A, 3-C", "1-C, 2-B, 3-A", "1-A, 2-C, 3-B"],
+        correctAnswer: 0,
+        explanationHtml: "<b>सही सुमेलित:</b><br/>• माड़िया जनजाति: <b>गौर (Bison Horn) नृत्य</b><br/>• उरांव जनजाति: <b>सरहुल नृत्य</b> (साल वृक्ष में फूल आने पर)<br/>• बैगा जनजाति: <b>बिलमा एवं परधोनी नृत्य</b>"
+      },
+      {
+        id: "dpq-4",
+        questionHtml: "<b>प्रश्न 4:</b> हाल ही में घोषित छत्तीसगढ़ की नई औद्योगिक नीति के तहत किस क्षेत्र को <i>'विशेष प्राथमिकता'</i> दी गई है?",
+        optionsHtml: ["रायपुर-बिलासपुर औद्योगिक गलियारा एवं एग्रो प्रोसेसिंग", "केवल लौह अयस्क निर्यात", "कोयला खनन", "हस्तशिल्प केवल"],
+        correctAnswer: 0,
+        explanationHtml: "<b>समाधान:</b> नई राज्य औद्योगिक नीति में खाद्य प्रसंस्करण (Agro Processing), इलेक्ट्रॉनिक्स तथा रायपुर-बिलासपुर औद्योगिक कॉरिडोर को विशेष प्रोत्साहन व सब्सिडी का प्रावधान किया गया है।"
+      },
+      {
+        id: "dpq-5",
+        questionHtml: "<b>प्रश्न 5:</b> कलचुरी राजवंश की रतनपुर शाखा के संस्थापक कौन थे?",
+        optionsHtml: ["कलिंगराज", "कमलराज", "रत्नदेव प्रथम", "पृथ्वीदेव प्रथम"],
+        correctAnswer: 2,
+        explanationHtml: "<b>विस्तृत व्याख्या:</b> कलचुरी वंश के शासक <b>रत्नदेव प्रथम</b> ने लगभग 1050 ईस्वी में रतनपुर नगर की स्थापना की तथा अपनी राजधानी तुम्माण से रतनपुर स्थानांतरित की।"
+      },
+      {
+        id: "dpq-6",
+        questionHtml: "<b>प्रश्न 6:</b> छत्तीसगढ़ राज्य का सबसे ऊंचा भाग <b>'गौरलाटा'</b> चोटी (1225 मीटर) किस पाट प्रदेश में स्थित है?",
+        optionsHtml: ["मैनपाट", "जसपुर पाट", "सामरी पाट", "जारंग पाट"],
+        correctAnswer: 2,
+        explanationHtml: "<b>व्याख्या:</b> छत्तीसगढ़ की सर्वोच्च पर्वत चोटी <b>गौरलाटा (1225 मीटर)</b> बलरामपुर जिले के <b>सामरी पाट</b> क्षेत्र में स्थित है।"
+      },
+      {
+        id: "dpq-7",
+        questionHtml: "<b>प्रश्न 7:</b> छत्तीसगढ़ में पंथी नृत्य मुख्य रूप से किस समुदाय द्वारा गुरु घासीदास जी के संदेशों के प्रचार हेतु किया जाता है?",
+        optionsHtml: ["कंवर", "सतनामी समुदाय", "हल्बा", "गोंड"],
+        correctAnswer: 1,
+        explanationHtml: "<b>व्याख्या:</b> पंथी नृत्य <b>सतनामी समुदाय</b> का आध्यात्मिक लोक नृत्य है, जो गुरु घासीदास जी के सत्य एवं अहिंसा के उपदेशों पर आधारित होता है।"
+      },
+      {
+        id: "dpq-8",
+        questionHtml: "<b>प्रश्न 8:</b> भारतीय संविधान का कौन सा अनुच्छेद <b>'ग्राम पंचायतों के गठन'</b> का राज्य को निर्देश देता है?",
+        optionsHtml: ["अनुच्छेद 39", "अनुच्छेद 40", "अनुच्छेद 44", "अनुच्छेद 50"],
+        correctAnswer: 1,
+        explanationHtml: "<b>व्याख्या:</b> संविधान के नीति निर्देशक तत्वों के तहत <b>अनुच्छेद 40</b> राज्यों को ग्राम पंचायतों के संगठन एवं स्वायत्त शासन की इकाइयाँ बनाने का निर्देश देता है।"
+      },
+      {
+        id: "dpq-9",
+        questionHtml: "<b>प्रश्न 9:</b> मणिकर्णिका घाट और कबीरचौरा का संबंध किस ऐतिहासिक शहर से है?",
+        optionsHtml: ["प्रयागराज", "वाराणसी", "हरिद्वार", "अयोध्या"],
+        correctAnswer: 1,
+        explanationHtml: "<b>समाधान:</b> मणिकर्णिका घाट और कबीरचौरा प्रसिद्ध सांस्कृतिक व आध्यात्मिक नगर <b>वाराणसी (काशी)</b> में स्थित हैं।"
+      },
+      {
+        id: "dpq-10",
+        questionHtml: "<b>प्रश्न 10:</b> छत्तीसगढ़ की मुख्य नदी 'महानदी' का उद्गम स्थल कौन सा है?",
+        optionsHtml: ["सिहावा पर्वत (धमतरी)", "मैनपाट (सरगुजा)", "मैकल श्रेणी (कबीरधाम)", "कोरिया पहाड़ी"],
+        correctAnswer: 0,
+        explanationHtml: "<b>व्याख्या:</b> महानदी का उद्गम धमतरी जिले के <b>सिहावा पर्वत (फरसिया गांव)</b> से होता है। इसकी कुल लंबाई 858 किमी है जिसमें से 286 किमी छत्तीसगढ़ में बहती है।"
+      },
+      {
+        id: "dpq-11",
+        questionHtml: "<b>प्रश्न 11:</b> भोरमदेव मंदिर का निर्माण किस राजवंश के शासनकाल में हुआ था?",
+        optionsHtml: ["सोमवंश", "फणिनागवंश", "छिंदक नागवंश", "काकतीय वंश"],
+        correctAnswer: 1,
+        explanationHtml: "<b>व्याख्या:</b> कबीरधाम (कवर्धा) स्थित भोरमदेव मंदिर का निर्माण 11वीं शताब्दी में <b>फणिनागवंश</b> के राजा गोपालदेव / रामचंद्र द्वारा कराया गया था। इसे 'छत्तीसगढ़ का खजुराहो' भी कहा जाता है।"
+      },
+      {
+        id: "dpq-12",
+        questionHtml: "<b>प्रश्न 12:</b> छत्तीसगढ़ में <i>'मिनीमाता'</i> के नाम से प्रसिद्ध महिला स्वतंत्रता सेनानी का वास्तविक नाम क्या था?",
+        optionsHtml: ["मीनाक्षी देवी", "माता राजमोहिनी", "मीनाक्षी अग्रहरि", "मीनाक्षी देवी (सत्यभामा)"],
+        correctAnswer: 3,
+        explanationHtml: "<b>व्याख्या:</b> छत्तीसगढ़ की प्रथम महिला सांसद <b>मिनीमाता</b> का वास्तविक नाम <b>मीनाक्षी देवी (सत्यभामा)</b> था। इन्होंने दलितों के उत्थान और बाल विवाह उन्मूलन हेतु ऐतिहासिक कार्य किए।"
+      },
+      {
+        id: "dpq-13",
+        questionHtml: "<b>प्रश्न 13:</b> 'चित्रकोट जलप्रपात' को भारत का नाइग्रा प्रपात कहा जाता है, यह किस नदी पर निर्मित है?",
+        optionsHtml: ["इंद्रावती नदी", "शबरी नदी", "कोलाब नदी", "महानदी"],
+        correctAnswer: 0,
+        explanationHtml: "<b>व्याख्या:</b> बस्तर जिले में स्थित <b>चित्रकोट जलप्रपात</b> <b>इंद्रावती नदी</b> पर स्थित है। यह भारत का सबसे चौड़ा (लगभग 300 मीटर) जलप्रपात है।"
+      },
+      {
+        id: "dpq-14",
+        questionHtml: "<b>प्रश्न 14:</b> छत्तीसगढ़ विधानसभा भवन का नामकरण किसके नाम पर किया गया है?",
+        optionsHtml: ["पंडित रविशंकर शुक्ल", "मिनीमाता", "स्वामी आत्मानंद", "वीर नारायण सिंह"],
+        correctAnswer: 1,
+        explanationHtml: "<b>व्याख्या:</b> छत्तीसगढ़ विधानसभा भवन का नामकरण राज्य की पहली महिला सांसद <b>मिनीमाता</b> के सम्मान में रखा गया है, जबकि मंत्रालय भवन का नाम <b>महानदी</b> तथा अध्यक्षीय निवास का नाम <b>करुणा</b> है।"
+      },
+      {
+        id: "dpq-15",
+        questionHtml: "<b>प्रश्न 15:</b> नीति आयोग के वर्तमान उपाध्यक्ष कौन हैं?",
+        optionsHtml: ["सुमन बेरी", "बी.वी.आर. सुब्रमण्यम", "अमिताभ कांत", "अरविंद पनगड़िया"],
+        correctAnswer: 0,
+        explanationHtml: "<b>व्याख्या:</b> नीति आयोग के पदेन अध्यक्ष देश के प्रधानमंत्री होते हैं तथा वर्तमान उपाध्यक्ष <b>डॉ. सुमन बेरी</b> हैं।"
+      },
+      {
+        id: "dpq-16",
+        questionHtml: "<b>प्रश्न 16:</b> 'माधवराव सप्रे' द्वारा 1900 ईस्वी में पेंड्रा रोड से छत्तीसगढ़ की किस पहली पत्रिका का प्रकाशन प्रारंभ किया गया था?",
+        optionsHtml: ["छत्तीसगढ़ मित्र", "महाकोशल", "अरुणोदय", "प्रजा हितैषी"],
+        correctAnswer: 0,
+        explanationHtml: "<b>व्याख्या:</b> सन 1900 में पंडित माधवराव सप्रे ने वामनराव लाखे और रामराव चिंचोलकर के सहयोग से <b>'छत्तीसगढ़ मित्र'</b> मासिक पत्रिका का प्रकाशन प्रारंभ किया था।"
+      },
+      {
+        id: "dpq-17",
+        questionHtml: "<b>प्रश्न 17:</b> राज्य नीति के निर्देशक सिद्धांतों को भारतीय संविधान में किस देश के संविधान से लिया गया है?",
+        optionsHtml: ["संयुक्त राज्य अमेरिका", "आयरलैंड", "ब्रिटेन", "कनाडा"],
+        correctAnswer: 1,
+        explanationHtml: "<b>व्याख्या:</b> भारतीय संविधान के भाग 4 (अनुच्छेद 36-51) में शामिल <b>नीति निर्देशक तत्व (DPSP)</b> <b>आयरलैंड</b> के संविधान से प्रेरित हैं।"
+      },
+      {
+        id: "dpq-18",
+        questionHtml: "<b>प्रश्न 18:</b> 'तातापानी' उष्ण जल स्रोत (Hot Spring) छत्तीसगढ़ के किस जिले में स्थित है?",
+        optionsHtml: ["बलरामपुर", "सूरजपुर", "सरगुजा", "कोरिया"],
+        correctAnswer: 0,
+        explanationHtml: "<b>व्याख्या:</b> बलरामपुर-रामानुजगंज जिले में स्थित <b>तातापानी</b> प्राकृतिक रूप से निरंतर उबलते हुए सल्फरयुक्त जल स्रोत हेतु प्रसिद्ध है। यहाँ भू-तापीय ऊर्जा (Geothermal Energy) संयंत्र भी स्थापित किया जा रहा है।"
+      },
+      {
+        id: "dpq-19",
+        questionHtml: "<b>प्रश्न 19:</b> कांगेर घाटी राष्ट्रीय उद्यान (बस्तर) की स्थापना किस वर्ष की गई थी?",
+        optionsHtml: ["1978", "1982", "1985", "1990"],
+        correctAnswer: 1,
+        explanationHtml: "<b>व्याख्या:</b> बस्तर स्थित <b>कांगेर घाटी राष्ट्रीय उद्यान</b> की स्थापना <b>1982</b> में हुई थी। यह लगभग 200 वर्ग किमी क्षेत्र में फैला छत्तीसगढ़ का सबसे छोटा राष्ट्रीय उद्यान है।"
+      },
+      {
+        id: "dpq-20",
+        questionHtml: "<b>प्रश्न 20:</b> छत्तीसगढ़ी भाषा का प्रथम व्याकरण ग्रंथ (1885 ई.) किसके द्वारा लिखा गया था?",
+        optionsHtml: ["हीरालाल काव्योपाध्याय", "ग्रियर्सन", "लोचन प्रसाद पांडेय", "मुकुटधर पांडेय"],
+        correctAnswer: 0,
+        explanationHtml: "<b>व्याख्या:</b> <b>हीरालाल काव्योपाध्याय</b> ने सन 1885 में छत्तीसगढ़ी भाषा का पहला व्याकरण रचा था, जिसे सर जॉर्ज ग्रियर्सन ने 1890 में रॉयल एशियाटिक सोसाइटी की पत्रिका में प्रकाशित कराया था।"
+      }
+    ],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
 // Database Loader / Saver Helpers
 let cachedDbInMemory: any = null;
 
@@ -173,6 +330,10 @@ function loadDatabase() {
         }
         if (!db.examInfo) {
           db.examInfo = initialExamInfo;
+          dirty = true;
+        }
+        if (!db.dailyPractice) {
+          db.dailyPractice = initialDailyPractice;
           dirty = true;
         }
         if (!db.user || db.user.name === "Sourav Patel") {
@@ -216,6 +377,7 @@ function loadDatabase() {
     attempts: initialAttempts,
     currentAffairs: initialCurrentAffairs,
     examInfo: initialExamInfo,
+    dailyPractice: initialDailyPractice,
     user: {
       id: "guest-user",
       name: "Aspirant",
@@ -277,97 +439,6 @@ app.post('/api/questions', (req, res) => {
   res.status(201).json(newQuestion);
 });
 
-// Helper to get correct Google Apps Script Webhook URL for a question
-function getAppsScriptUrlForQuestion(db: any, q?: any): string {
-  const isPyq = q ? Boolean(q.exam && String(q.exam).trim()) : false;
-  const pyqUrl = db.settings?.googleAppsScriptUrlPyq?.trim();
-  const subjectUrl = db.settings?.googleAppsScriptUrlSubject?.trim();
-  const generalUrl = db.settings?.googleAppsScriptUrl?.trim();
-
-  if (isPyq) {
-    return pyqUrl || generalUrl || subjectUrl || '';
-  } else {
-    return subjectUrl || generalUrl || pyqUrl || '';
-  }
-}
-
-// Helper to post to Google Apps Script Webhook
-async function callGoogleAppsScriptWebhook(targetUrl: string, payload: any): Promise<{ success: boolean; error?: string }> {
-  try {
-    console.log(`[GoogleSheetSync] Sending POST request to Apps Script Webhook: ${targetUrl.substring(0, 45)}...`);
-    const bodyString = JSON.stringify(payload);
-    
-    // Execute POST with redirect: 'follow' (Node fetch automatically follows 302 to script.googleusercontent.com)
-    let response = await fetch(targetUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: bodyString,
-      redirect: 'follow'
-    });
-
-    if (!response.ok) {
-      console.error(`[GoogleSheetSync] Error HTTP ${response.status} from Google Apps Script`);
-      return { success: false, error: `Google Apps Script returned HTTP ${response.status}` };
-    }
-
-    const resText = await response.text();
-    console.log(`[GoogleSheetSync] Response from Google Apps Script:`, resText.substring(0, 150));
-    try {
-      const resJson = JSON.parse(resText);
-      if (resJson.status === 'success' || resJson.status === 'ok') {
-        return { success: true };
-      } else if (resJson.status === 'not_found') {
-        return { success: false, error: "गूगल शीट में यह प्रश्न (ID/टेक्स्ट) नहीं मिला।" };
-      } else {
-        return { success: false, error: resJson.error || "गूगल एप्स स्क्रिप्ट से प्रतिक्रिया में त्रुटि मिली।" };
-      }
-    } catch (parseErr) {
-      if (resText.includes('HTML') || resText.includes('<!DOCTYPE') || resText.includes('<html')) {
-        return { success: false, error: "Apps Script से HTML मिला। वेब एप 'Deploy -> New deployment -> Who has access: Anyone' सेट किया गया होना चाहिए।" };
-      }
-      if (resText.toLowerCase().includes('success') || resText.toLowerCase().includes('ok')) {
-        return { success: true };
-      }
-      return { success: false, error: `प्रतिक्रिया: ${resText.substring(0, 100)}` };
-    }
-  } catch (err: any) {
-    console.error(`[GoogleSheetSync] Exception calling Apps Script Webhook:`, err.message);
-    return { success: false, error: err.message || "Apps Script वेबहुक तक पहुँचने में विफल।" };
-  }
-}
-
-// Create single question
-app.post('/api/questions', async (req, res) => {
-  const db = loadDatabase();
-  const newQuestion = req.body;
-  if (!newQuestion.id) {
-    newQuestion.id = "q-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5);
-  }
-  db.questions = db.questions || [];
-  db.questions.push(newQuestion);
-  saveDatabase(db);
-
-  let sheetSynced = false;
-  let syncError: string | null = null;
-  const targetAppsScriptUrl = getAppsScriptUrlForQuestion(db, newQuestion);
-  if (targetAppsScriptUrl) {
-    const isPyq = Boolean(newQuestion.exam && String(newQuestion.exam).trim());
-    const syncRes = await callGoogleAppsScriptWebhook(targetAppsScriptUrl, {
-      action: 'UPDATE_QUESTION',
-      sheetType: isPyq ? 'pyq' : 'subject',
-      question: newQuestion
-    });
-    sheetSynced = syncRes.success;
-    syncError = syncRes.error || null;
-  }
-
-  res.status(201).json({
-    ...newQuestion,
-    sheetSynced,
-    syncError
-  });
-});
-
 // Update single question by ID
 app.put('/api/questions/:id', async (req, res) => {
   const db = loadDatabase();
@@ -393,22 +464,31 @@ app.put('/api/questions/:id', async (req, res) => {
   saveDatabase(db);
 
   let sheetSynced = false;
-  let syncError: string | null = null;
+  let syncError = null;
 
   // Attempt Google Apps Script Webhook Sync if URL configured
-  const isPyq = Boolean(mergedQ.exam && String(mergedQ.exam).trim());
-  const targetAppsScriptUrl = getAppsScriptUrlForQuestion(db, mergedQ);
-
-  if (targetAppsScriptUrl) {
-    const syncRes = await callGoogleAppsScriptWebhook(targetAppsScriptUrl, {
-      action: 'UPDATE_QUESTION',
-      sheetType: isPyq ? 'pyq' : 'subject',
-      question: mergedQ,
-      oldQuestion: existingQ
-    });
-
-    sheetSynced = syncRes.success;
-    syncError = syncRes.error || null;
+  const appsScriptUrl = db.settings && db.settings.googleAppsScriptUrl;
+  if (appsScriptUrl && appsScriptUrl.trim()) {
+    try {
+      const isPyq = Boolean(mergedQ.exam && mergedQ.exam.trim());
+      const response = await fetch(appsScriptUrl.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_QUESTION',
+          sheetType: isPyq ? 'pyq' : 'subject',
+          question: mergedQ
+        })
+      });
+      if (response.ok) {
+        sheetSynced = true;
+      } else {
+        syncError = `HTTP ${response.status}`;
+      }
+    } catch (err: any) {
+      console.error("Google Apps Script Sync error:", err);
+      syncError = err.message || "Failed to trigger Apps Script Webhook";
+    }
   }
 
   res.json({
@@ -423,122 +503,79 @@ app.put('/api/questions/:id', async (req, res) => {
 // Manual trigger to sync a question or list of questions to Google Apps Script
 app.post('/api/sync-question-to-sheet', async (req, res) => {
   const db = loadDatabase();
-  const { question, questions, appsScriptUrl: reqUrl } = req.body;
+  const appsScriptUrl = (db.settings && db.settings.googleAppsScriptUrl) || req.body.appsScriptUrl;
+
+  if (!appsScriptUrl || !appsScriptUrl.trim()) {
+    return res.status(400).json({ error: "Google Apps Script URL is not configured in Settings." });
+  }
+
+  const { question, questions } = req.body;
   const itemsToSync = questions || (question ? [question] : []);
 
   if (!itemsToSync.length) {
-    return res.status(400).json({ error: "सिंक करने के लिए कोई प्रश्न नहीं मिला।" });
+    return res.status(400).json({ error: "No question provided to sync." });
   }
 
   try {
     let successCount = 0;
-    let lastError: string | null = null;
-
     for (const q of itemsToSync) {
-      const targetUrl = reqUrl?.trim() || getAppsScriptUrlForQuestion(db, q);
-      if (!targetUrl) {
-        lastError = "गूगल एप्स स्क्रिप्ट URL सेटिंग्स में दर्ज नहीं है।";
-        continue;
-      }
-
-      const isPyq = Boolean(q.exam && String(q.exam).trim());
-      const resSync = await callGoogleAppsScriptWebhook(targetUrl, {
-        action: 'UPDATE_QUESTION',
-        sheetType: isPyq ? 'pyq' : 'subject',
-        question: q
+      const isPyq = Boolean(q.exam && q.exam.trim());
+      const response = await fetch(appsScriptUrl.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_QUESTION',
+          sheetType: isPyq ? 'pyq' : 'subject',
+          question: q
+        })
       });
-
-      if (resSync.success) {
+      if (response.ok) {
         successCount++;
-      } else if (resSync.error) {
-        lastError = resSync.error;
       }
     }
 
-    if (successCount > 0) {
-      res.json({
-        success: true,
-        syncedCount: successCount,
-        totalCount: itemsToSync.length,
-        message: `सफलतापूर्वक ${successCount} प्रश्न गूगल शीट में सिंक/अपडेट हो गए!`
-      });
-    } else {
-      res.status(400).json({
-        error: lastError || "गूगल शीट में डेटा सिंक नहीं हो सका। कृपया Webhook URL जांचें।"
-      });
-    }
+    res.json({
+      success: true,
+      syncedCount: successCount,
+      totalCount: itemsToSync.length,
+      message: `Successfully synced ${successCount} question(s) to Google Sheets!`
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Apps Script वेबहुक तक पहुँचने में विफल।" });
+    res.status(500).json({ error: err.message || "Failed to reach Google Apps Script Webhook." });
   }
 });
 
-// Full Bulk Sync endpoint to push all questions directly to Google Apps Script
-app.post('/api/sync-all-to-sheet', async (req, res) => {
+// Delete ALL questions
+app.delete('/api/questions/all', (req, res) => {
   const db = loadDatabase();
-  const { sheetType = 'pyq' } = req.body;
-  const isPyq = sheetType === 'pyq';
+  const deletedCount = (db.questions || []).length;
+  db.questions = [];
+  saveDatabase(db);
+  res.json({ message: "All questions deleted successfully", deletedCount });
+});
 
-  const dummyQ = { exam: isPyq ? 'PYQ' : '' };
-  const targetAppsScriptUrl = getAppsScriptUrlForQuestion(db, dummyQ);
-
-  if (!targetAppsScriptUrl) {
-    return res.status(400).json({ error: "कृपया सेटिंग्स में गूगल एप्स स्क्रिप्ट वेबहुक URL सहेजें।" });
-  }
-
-  const allQuestions = db.questions || [];
-  const questionsToSync = allQuestions.filter((q: any) => {
-    if (isPyq) return Boolean(q.exam && String(q.exam).trim());
-    return !q.exam || !q.exam.trim();
-  });
-
-  if (questionsToSync.length === 0) {
-    return res.status(400).json({ error: "गूगल शीट में सिंक करने के लिए कोई प्रश्न नहीं मिले।" });
-  }
-
-  const syncRes = await callGoogleAppsScriptWebhook(targetAppsScriptUrl, {
-    action: 'SYNC_ALL_QUESTIONS',
-    sheetType: isPyq ? 'pyq' : 'subject',
-    questions: questionsToSync
-  });
-
-  if (syncRes.success) {
-    return res.json({
-      success: true,
-      count: questionsToSync.length,
-      message: `सफलतापूर्वक सभी ${questionsToSync.length} प्रश्नों को गूगल शीट में सिंक/अपडेट कर दिया गया!`
-    });
-  } else {
-    return res.status(500).json({
-      error: syncRes.error || "गूगल शीट में डेटा पुश करने में विफलता।"
-    });
-  }
+app.delete('/api/questions', (req, res) => {
+  const db = loadDatabase();
+  const deletedCount = (db.questions || []).length;
+  db.questions = [];
+  saveDatabase(db);
+  res.json({ message: "All questions deleted successfully", deletedCount });
 });
 
 // Delete single question
-app.delete('/api/questions/:id', async (req, res) => {
+app.delete('/api/questions/:id', (req, res) => {
   const db = loadDatabase();
   const qId = req.params.id;
   db.questions = db.questions || [];
   
-  const targetQ = db.questions.find((q: any) => q.id === qId);
-  if (!targetQ) {
+  const initialLength = db.questions.length;
+  db.questions = db.questions.filter((q: any) => q.id !== qId);
+  
+  if (db.questions.length === initialLength) {
     return res.status(404).json({ error: "Question not found" });
   }
-
-  db.questions = db.questions.filter((q: any) => q.id !== qId);
+  
   saveDatabase(db);
-
-  // Sync deletion to Google Sheet if Webhook configured
-  const targetAppsScriptUrl = getAppsScriptUrlForQuestion(db, targetQ);
-  if (targetAppsScriptUrl) {
-    const isPyq = Boolean(targetQ.exam && String(targetQ.exam).trim());
-    callGoogleAppsScriptWebhook(targetAppsScriptUrl, {
-      action: 'UPDATE_QUESTION',
-      sheetType: isPyq ? 'pyq' : 'subject',
-      question: { ...targetQ, is_deleted: true, text_hi: (targetQ.text_hi || '') + ' (DELETED)' }
-    }).catch(() => {});
-  }
-
   res.json({ message: "Question deleted successfully", id: qId });
 });
 
@@ -586,13 +623,6 @@ function parseCorrectAnswerServer(rawVal: any, options: string[]): number {
   if (rawVal === undefined || rawVal === null) return 0;
   const valStr = String(rawVal).trim();
   if (valStr === '') return 0;
-
-  if (
-    valStr.includes('*') ||
-    /^(star|vifopit|wilopit|deleted|invalidated|cancelled|विलोपित|स्टार)$/i.test(valStr)
-  ) {
-    return -1;
-  }
 
   if (/^[a-eA-E]$/.test(valStr)) {
     return valStr.toUpperCase().charCodeAt(0) - 65;
@@ -737,14 +767,7 @@ function processParsedRows(rawJsonRows: any[], sheetType: string, action: string
     const options_hi = [opt1, opt2, opt3, opt4, opt5].filter(Boolean);
 
     const ansRaw = getVal(['correctAnswer', 'Correct Answer', 'Answer', 'correct_answer', 'CorrectAnswer', 'उत्तर', 'सही उत्तर']) || '1';
-    const deletedRaw = getVal(['is_deleted', 'is_invalidated', 'vifopit', 'wilopit', 'is_vifopit', 'विलोपित', 'deleted', 'cancelled', 'is_deleted_question']);
-
-    const isDeletedQuestion = Boolean(
-      (ansRaw && (ansRaw.includes('*') || /^(star|vifopit|wilopit|deleted|invalidated|cancelled|विलोपित|स्टार)$/i.test(ansRaw.trim()))) ||
-      (deletedRaw && (deletedRaw.includes('*') || /^(true|1|yes|vifopit|wilopit|deleted|invalidated|cancelled|विलोपित|हाँ|star)$/i.test(deletedRaw.trim())))
-    );
-
-    const correctAnswer = isDeletedQuestion ? -1 : parseCorrectAnswerServer(ansRaw, options_hi);
+    const correctAnswer = parseCorrectAnswerServer(ansRaw, options_hi);
 
     let defaultSub = 'Chhattisgarh General Knowledge';
     if (sheetType === 'subject') defaultSub = 'Chhattisgarh General Knowledge';
@@ -758,18 +781,13 @@ function processParsedRows(rawJsonRows: any[], sheetType: string, action: string
     const explanation_hi = getVal(['explanation_hi', 'Explanation (HI)', 'Explanation', 'व्याख्या', 'व्याख्या (हिन्दी)']);
     const explanation_en = getVal(['explanation_en', 'Explanation (EN)', 'व्याख्या (अंग्रेजी)']);
 
-    const idVal = getVal(['id', 'ID', 'Id', 'S.No', 'Sr.No', 's_no', 'sr_no']);
-    const idToUse = idVal ? String(idVal).trim() : `q-sheet-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`;
-
     return {
-      id: idToUse,
-      sheetRowNumber: idx + 2,
+      id: `q-sheet-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
       text_hi: String(textHi).trim(),
       text_en: String(textEn).trim(),
       options_hi,
       options_en: [],
       correctAnswer,
-      is_deleted: isDeletedQuestion,
       subject: String(subject).trim(),
       topic: String(topic).trim(),
       exam: String(exam || '').trim(),
@@ -1312,6 +1330,75 @@ app.put('/api/exam-info-reorder', (req, res) => {
   res.json({ message: "Exam sequence reordered successfully", count: newExamsList.length });
 });
 
+// Daily Practice Endpoints
+app.get('/api/daily-practice', (req, res) => {
+  const db = loadDatabase();
+  const sets = db.dailyPractice || [];
+  // Sort by date descending
+  sets.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  res.json(sets);
+});
+
+app.get('/api/daily-practice/:id', (req, res) => {
+  const db = loadDatabase();
+  const { id } = req.params;
+  const set = (db.dailyPractice || []).find((item: any) => item.id === id);
+  if (!set) {
+    return res.status(404).json({ error: "Daily practice set not found" });
+  }
+  res.json(set);
+});
+
+app.post('/api/daily-practice', (req, res) => {
+  const db = loadDatabase();
+  const newItem = req.body;
+  if (!newItem.id) {
+    newItem.id = "dp-" + (newItem.date || new Date().toISOString().split('T')[0]) + "-" + Math.random().toString(36).substr(2, 4);
+  }
+  newItem.createdAt = newItem.createdAt || new Date().toISOString();
+  newItem.updatedAt = new Date().toISOString();
+  
+  db.dailyPractice = db.dailyPractice || [];
+  const existingIdx = db.dailyPractice.findIndex((item: any) => item.id === newItem.id);
+  if (existingIdx > -1) {
+    db.dailyPractice[existingIdx] = newItem;
+  } else {
+    db.dailyPractice.unshift(newItem);
+  }
+  
+  saveDatabase(db);
+  res.status(201).json(newItem);
+});
+
+app.put('/api/daily-practice/:id', (req, res) => {
+  const db = loadDatabase();
+  const { id } = req.params;
+  const updatedItem = req.body;
+  updatedItem.id = id;
+  updatedItem.updatedAt = new Date().toISOString();
+
+  db.dailyPractice = db.dailyPractice || [];
+  const existingIdx = db.dailyPractice.findIndex((item: any) => item.id === id);
+  if (existingIdx > -1) {
+    db.dailyPractice[existingIdx] = updatedItem;
+  } else {
+    db.dailyPractice.unshift(updatedItem);
+  }
+
+  saveDatabase(db);
+  res.json(updatedItem);
+});
+
+app.delete('/api/daily-practice/:id', (req, res) => {
+  const db = loadDatabase();
+  const { id } = req.params;
+  db.dailyPractice = db.dailyPractice || [];
+  db.dailyPractice = db.dailyPractice.filter((item: any) => item.id !== id);
+  saveDatabase(db);
+  res.json({ message: "Daily practice set deleted successfully", id });
+});
+
+
 // SEO Route: robots.txt
 app.get('/robots.txt', (req, res) => {
   const robotsTxt = `User-agent: *
@@ -1424,10 +1511,10 @@ app.get('/sitemap.xml', (req, res) => {
 // Setup Vite & Static Assets serving
 async function startServer() {
   const distPath = path.join(process.cwd(), 'dist');
-  const isProduction = process.env.NODE_ENV === "production";
+  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+  const isProduction = process.env.NODE_ENV === "production" || hasDist;
 
   if (!isProduction) {
-    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

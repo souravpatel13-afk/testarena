@@ -49,14 +49,6 @@ export const parseCorrectAnswer = (rawVal: any, options: string[]): number => {
   const valStr = String(rawVal).trim();
   if (valStr === '') return 0;
 
-  // Star mark (*) or invalidated / deleted question keywords
-  if (
-    valStr.includes('*') ||
-    /^(star|vifopit|wilopit|deleted|invalidated|cancelled|विलोपित|स्टार)$/i.test(valStr)
-  ) {
-    return -1; // -1 represents invalidated/deleted question
-  }
-
   // 1. If it's a letter A-E / a-e
   if (/^[a-eA-E]$/.test(valStr)) {
     return valStr.toUpperCase().charCodeAt(0) - 65;

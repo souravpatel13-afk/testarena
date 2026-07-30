@@ -151,56 +151,62 @@ export default function SubjectSelector({ quizzes, questions, onSelectQuiz, onSt
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {Object.entries(subjectGroups)
-                  .filter(([subName]) => subName.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map(([subjectName, qIds], idx) => {
-                    const grad = cardGradients[idx % cardGradients.length];
-                    return (
-                      <div 
-                        key={idx} 
-                        className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between group"
-                      >
-                        {/* Gradient Top */}
-                        <div className={`p-5 bg-gradient-to-tr ${grad} text-white relative`}>
-                          <span className="text-[10px] bg-white/25 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider backdrop-blur-sm text-white font-sans">
-                            Entire Subject Test
-                          </span>
-                          <div className="mt-8 mb-2">
-                            <h3 className="text-base font-extrabold tracking-tight line-clamp-1">{subjectName}</h3>
-                            <p className="text-[10px] text-white/80 mt-1 font-sans">कम्पलीट विषय टेस्ट (सभी टॉपिक शामिल)</p>
-                          </div>
-                        </div>
-
-                        {/* Card Details */}
-                        <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
-                              <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
-                              <span className="font-sans">विस्तृत व्याख्या सहित (Hindi Solutions)</span>
-                            </div>
-                            
-                            <div className="flex items-center gap-4 pt-1 text-xs text-gray-500 font-sans">
-                              <span className="flex items-center gap-1 bg-gray-50 px-2.5 py-1 rounded-lg">
-                                <HelpCircle className="h-3.5 w-3.5 text-gray-400" /> {qIds.length} MCQs
-                              </span>
-                              <span className="flex items-center gap-1 bg-gray-50 px-2.5 py-1 rounded-lg">
-                                <Clock className="h-3.5 w-3.5 text-gray-400" /> {Math.max(5, Math.ceil(qIds.length * 1.5))} Mins
-                              </span>
+              {Object.keys(subjectGroups).length === 0 ? (
+                <div className="text-center py-12 bg-white border border-gray-100 rounded-3xl text-gray-500 text-xs font-semibold">
+                  कोई विषयवार अभ्यास प्रश्न उपलब्ध नहीं हैं। एडमिन पैनल से नए प्रश्न जोड़ें या अपलोड करें।
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {Object.entries(subjectGroups)
+                    .filter(([subName]) => subName.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map(([subjectName, qIds], idx) => {
+                      const grad = cardGradients[idx % cardGradients.length];
+                      return (
+                        <div 
+                          key={idx} 
+                          className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between group"
+                        >
+                          {/* Gradient Top */}
+                          <div className={`p-5 bg-gradient-to-tr ${grad} text-white relative`}>
+                            <span className="text-[10px] bg-white/25 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider backdrop-blur-sm text-white font-sans">
+                              Entire Subject Test
+                            </span>
+                            <div className="mt-8 mb-2">
+                              <h3 className="text-base font-extrabold tracking-tight line-clamp-1">{subjectName}</h3>
+                              <p className="text-[10px] text-white/80 mt-1 font-sans">कम्पलीट विषय टेस्ट (सभी टॉपिक शामिल)</p>
                             </div>
                           </div>
 
-                          <button
-                            onClick={() => handleStartEntireSubjectTest(subjectName, qIds)}
-                            className="w-full bg-emerald-800 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
-                          >
-                            पूरा विषय टेस्ट शुरू करें <Play className="h-3.5 w-3.5 fill-white" />
-                          </button>
+                          {/* Card Details */}
+                          <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
+                                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                                <span className="font-sans">विस्तृत व्याख्या सहित (Hindi Solutions)</span>
+                              </div>
+                              
+                              <div className="flex items-center gap-4 pt-1 text-xs text-gray-500 font-sans">
+                                <span className="flex items-center gap-1 bg-gray-50 px-2.5 py-1 rounded-lg">
+                                  <HelpCircle className="h-3.5 w-3.5 text-gray-400" /> {qIds.length} MCQs
+                                </span>
+                                <span className="flex items-center gap-1 bg-gray-50 px-2.5 py-1 rounded-lg">
+                                  <Clock className="h-3.5 w-3.5 text-gray-400" /> {Math.max(5, Math.ceil(qIds.length * 1.5))} Mins
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => handleStartEntireSubjectTest(subjectName, qIds)}
+                              className="w-full bg-emerald-800 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                            >
+                              पूरा विषय टेस्ट शुरू करें <Play className="h-3.5 w-3.5 fill-white" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-              </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
 
 

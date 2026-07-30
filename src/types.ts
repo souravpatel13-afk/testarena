@@ -16,7 +16,6 @@ export interface Question {
   year?: number; // e.g., 2023 (optional)
   explanation_hi?: string; // Hindi explanation
   explanation_en?: string; // English explanation
-  is_deleted?: boolean; // True if question was invalidated/deleted by board (* marked in sheet)
 }
 
 export interface Quiz {
@@ -121,6 +120,29 @@ export interface ExamInfo {
   syllabus: ExamSyllabusPaper[];
   pdfUrl?: string; // Direct link to Syllabus PDF
   richContent?: string; // Full MS Word style HTML/Markdown content with tables, links, PDFs, etc.
+  updatedAt: string;
+}
+
+export interface DailyPracticeQuestion {
+  id: string;
+  questionHtml: string; // HTML code or formatted text for question
+  optionsHtml: string[]; // Array of 4 options HTML strings
+  correctAnswer: number; // 0, 1, 2, 3
+  explanationHtml?: string; // HTML code or detailed explanation
+  subjectTag?: string; // e.g. "छत्तीसगढ़ इतिहास", "करंट अफेयर्स"
+}
+
+export interface DailyPracticeSet {
+  id: string;
+  date: string; // YYYY-MM-DD e.g. "2026-07-29"
+  title: string; // e.g. "डेली प्रैक्टिस सेट - 29 जुलाई 2026"
+  description?: string;
+  subject: string; // e.g. "छत्तीसगढ़ सामान्य ज्ञान एवं समसामयिकी"
+  targetExam?: string; // e.g. "CGPSC / व्यापमं / पुलिस भर्ती"
+  durationMinutes: number; // e.g. 20
+  rawHtmlContent?: string; // Full raw HTML block if uploaded/pasted directly
+  questions: DailyPracticeQuestion[];
+  createdAt: string;
   updatedAt: string;
 }
 

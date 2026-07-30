@@ -9,12 +9,15 @@ import {
   ChevronRight,
   ShieldAlert,
   Users,
-  GraduationCap
+  GraduationCap,
+  Sparkles,
+  Zap,
+  Calendar
 } from 'lucide-react';
 import { ExamInfo, Question } from '../types';
 
 interface HomeProps {
-  onNavigate: (tab: 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'exam-info') => void;
+  onNavigate: (tab: 'daily-practice' | 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'exam-info') => void;
   questionsCount: number;
   quizzesCount: number;
   exams?: ExamInfo[];
@@ -25,10 +28,10 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
   const realQuestionsCount = questionsCount || questions.length || 0;
   
   const uniqueTopics = new Set(questions.map(q => q.topic).filter(Boolean));
-  const realTopicsCount = uniqueTopics.size > 0 ? uniqueTopics.size : (quizzesCount || 0);
+  const realTopicsCount = uniqueTopics.size;
 
   const uniqueExams = new Set(questions.map(q => q.exam).filter(Boolean));
-  const realExamsCount = exams.length > 0 ? exams.length : (uniqueExams.size > 0 ? uniqueExams.size : 0);
+  const realExamsCount = uniqueExams.size;
 
   const successPoints = [
     {
@@ -79,6 +82,10 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
           
           {/* Left Column Text & CTA */}
           <div className="lg:col-span-7 space-y-6">
+            <span className="text-xs font-black uppercase tracking-widest text-emerald-200 bg-emerald-950/60 px-4 py-1.5 rounded-full backdrop-blur-md inline-block border border-emerald-600/40">
+              TEST ARENA
+            </span>
+            
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-tight text-white">
               Crack Your Exam <br />
               <span className="text-yellow-300">With Smart Practice</span>
@@ -90,10 +97,17 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
               <button
-                onClick={() => onNavigate('subjects')}
-                className="bg-yellow-400 hover:bg-yellow-300 text-gray-950 font-black px-8 py-4 rounded-full text-sm shadow-xl transition-all transform hover:scale-105 flex items-center gap-2 cursor-pointer"
+                onClick={() => onNavigate('daily-practice')}
+                className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-black px-8 py-4 rounded-full text-sm shadow-xl transition-all transform hover:scale-105 flex items-center gap-2 cursor-pointer border-2 border-amber-300"
               >
-                🚀 Start Practice
+                ⚡ Daily Practice (20-25 Ques)
+              </button>
+
+              <button
+                onClick={() => onNavigate('subjects')}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-6 py-4 rounded-full text-sm shadow-md transition cursor-pointer"
+              >
+                🚀 Subject Tests
               </button>
 
               <button
@@ -140,6 +154,30 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
             <span className="text-xs text-emerald-100 font-bold uppercase tracking-wider">Exams</span>
           </div>
         </div>
+      </div>
+
+      {/* Daily Practice Feature Spotlight Banner */}
+      <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 rounded-3xl p-6 sm:p-8 text-white shadow-md border border-emerald-700/50 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="space-y-2 text-center md:text-left">
+          <div className="inline-flex items-center gap-2 bg-amber-400/20 text-amber-300 border border-amber-300/30 text-[11px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
+            <Sparkles className="h-4 w-4 text-amber-300 animate-bounce" />
+            डेली क्विज अभ्यास (Daily Practice Questions)
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+            दैनिक अभ्यास - रोज 20 से 25 नए महत्वपूर्ण प्रश्नोत्तर!
+          </h2>
+          <p className="text-xs sm:text-sm text-emerald-100 leading-relaxed max-w-2xl font-medium">
+            प्रतियोगी परीक्षाओं की तैयारी के लिए रोज नए वस्तुनिष्ठ प्रश्न, टाइमर एवं विस्तृत व्याख्या के साथ अभ्यास करें और अपनी तैयारी का आकलन करें।
+          </p>
+        </div>
+        <button
+          onClick={() => onNavigate('daily-practice')}
+          className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-black px-7 py-3.5 rounded-2xl text-xs transition shadow-lg flex items-center gap-2 shrink-0 cursor-pointer transform hover:scale-105"
+        >
+          <Zap className="h-4 w-4 text-gray-950" />
+          आज का टेस्ट शुरू करें
+          <ChevronRight className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Sleek Dedicated Exam & Syllabus Teaser Card */}

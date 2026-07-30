@@ -194,13 +194,7 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
 
     questions.forEach(q => {
       const ans = answers[q.id];
-      const isQuestionDeleted = Boolean(q.is_deleted || q.correctAnswer === -1);
-
-      if (isQuestionDeleted) {
-        // Cancelled / Vifopit question: Bonus marks for everyone!
-        correct++;
-        finalAnswers[q.id] = ans !== undefined ? ans : -1;
-      } else if (ans === undefined) {
+      if (ans === undefined) {
         skipped++;
         finalAnswers[q.id] = -1; // -1 represents skipped
       } else {
@@ -463,15 +457,14 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
           <div className="space-y-6">
             {questions.map((q, idx) => {
               const userAnsIdx = attemptResult.answers[q.id];
-              const isQuestionDeleted = Boolean(q.is_deleted || q.correctAnswer === -1);
-              const isCorrect = isQuestionDeleted ? true : (userAnsIdx === q.correctAnswer);
-              const isSkipped = !isQuestionDeleted && userAnsIdx === -1;
+              const isCorrect = userAnsIdx === q.correctAnswer;
+              const isSkipped = userAnsIdx === -1;
 
               return (
                 <div 
                   key={idx} 
                   className={`bg-white rounded-2xl border p-5 sm:p-6 space-y-4 transition ${
-                    isQuestionDeleted ? 'border-amber-300 bg-amber-50/10' : isCorrect ? 'border-emerald-200 bg-emerald-50/5' : isSkipped ? 'border-gray-200' : 'border-red-200 bg-red-50/5'
+                    isCorrect ? 'border-emerald-200 bg-emerald-50/5' : isSkipped ? 'border-gray-200' : 'border-red-200 bg-red-50/5'
                   }`}
                 >
                   {/* Subject details */}
@@ -486,11 +479,7 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
                       <span className="bg-blue-50 text-blue-800 font-bold px-2 py-0.5 rounded text-[10px]">
                         {q.topic}
                       </span>
-                      {isQuestionDeleted ? (
-                        <span className="text-amber-800 font-extrabold flex items-center gap-1 bg-amber-100 px-2.5 py-0.5 rounded-full text-[10px] border border-amber-300">
-                          <AlertCircle className="h-3.5 w-3.5 text-amber-600" /> विलोपित (+2.0 बोनस)
-                        </span>
-                      ) : isCorrect ? (
+                      {isCorrect ? (
                         <span className="text-emerald-700 font-bold flex items-center gap-0.5 bg-emerald-50 px-2.5 py-0.5 rounded-full text-[10px] border border-emerald-100">
                           <CheckCircle2 className="h-3.5 w-3.5" /> Correct
                         </span>
@@ -654,21 +643,6 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
                 </button>
               </div>
             </div>
-
-            {/* Vifopit / Invalidated Question Banner */}
-            {Boolean(activeQuestion.is_deleted || activeQuestion.correctAnswer === -1) && (
-              <div className="p-3.5 bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl flex items-start gap-3 text-amber-950 font-sans shadow-2xs">
-                <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="block font-black text-amber-900 text-xs sm:text-sm">
-                    ⚠️ आयोग द्वारा विलोपित प्रश्न (Invalidated / Deleted Question)
-                  </span>
-                  <span className="text-[11px] font-semibold text-amber-800 leading-snug block mt-0.5">
-                    यह प्रश्न आयोग (CGPSC / Vyapam) द्वारा उत्तर कुंजी संशोधन में विलोपित कर दिया गया है। उत्तर चुनने या न चुनने दोनों स्थितियों में सभी अभ्यर्थियों को पूर्ण <strong>+2.0 बोनस अंक</strong> प्राप्त होंगे।
-                  </span>
-                </div>
-              </div>
-            )}
 
             {/* Question content */}
             <div className="space-y-3">

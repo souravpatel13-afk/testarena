@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   PlusCircle, 
   FileSpreadsheet, 
@@ -43,6 +43,7 @@ import {
   UploadCloud,
   ArrowUp,
   ArrowDown,
+  Unlink,
   Star,
   CheckCircle,
   XCircle,
@@ -54,11 +55,10 @@ import {
   Wand2,
   Layers,
   Settings2,
-  Code2,
-  Image as ImageIcon
+  Code2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Question, ExamInfo } from '../types';
+import { Question, ExamInfo, DailyPracticeSet, DailyPracticeQuestion } from '../types';
 import { parseCorrectAnswer } from '../utils/quizHelpers';
 import { auth, googleSignIn, logout, getAccessToken, setAccessToken } from '../lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -131,15 +131,11 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [sheetPullingType, setSheetPullingType] = useState<'pyq' | 'subject' | 'currentAffairs' | null>(null);
 
   // Navigation tabs for Admin
-  const [activeSubTab, setActiveSubTab] = useState<'proofread' | 'sheets' | 'excel' | 'list' | 'currentAffairs' | 'aboutExam'>('proofread');
+  const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'excel' | 'manual' | 'list' | 'currentAffairs' | 'aboutExam' | 'proofread' | 'dailyPractice'>('dailyPractice');
   
   // Google Apps Script Webhook State
   const [googleAppsScriptUrl, setGoogleAppsScriptUrl] = useState<string>('');
   const [inputAppsScriptUrl, setInputAppsScriptUrl] = useState<string>('');
-  const [googleAppsScriptUrlPyq, setGoogleAppsScriptUrlPyq] = useState<string>('');
-  const [inputAppsScriptUrlPyq, setInputAppsScriptUrlPyq] = useState<string>('');
-  const [googleAppsScriptUrlSubject, setGoogleAppsScriptUrlSubject] = useState<string>('');
-  const [inputAppsScriptUrlSubject, setInputAppsScriptUrlSubject] = useState<string>('');
   const [isAppsScriptModalOpen, setIsAppsScriptModalOpen] = useState(false);
   const [appsScriptSaving, setAppsScriptSaving] = useState(false);
   const [appsScriptSuccess, setAppsScriptSuccess] = useState<string | null>(null);
@@ -204,6 +200,261 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [uploadErrorMsg, setUploadErrorMsg] = useState<string | null>(null);
   const [parsedExcelQuestions, setParsedExcelQuestions] = useState<any[]>([]);
 
+  // Daily Practice States & Handlers
+  const [dpList, setDpList] = useState<DailyPracticeSet[]>([]);
+  const [dpLoading, setDpLoading] = useState(false);
+  const [dpEditingId, setDpEditingId] = useState<string | null>(null);
+  const [dpDate, setDpDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dpTitle, setDpTitle] = useState('');
+  const [dpDescription, setDpDescription] = useState('');
+  const [dpSubject, setDpSubject] = useState('छत्तीसगढ़ सामान्य ज्ञान एवं समसामयिकी');
+  const [dpTargetExam, setDpTargetExam] = useState('CGPSC / व्यापमं');
+  const [dpDuration, setDpDuration] = useState<number>(20);
+  const [dpQuestions, setDpQuestions] = useState<DailyPracticeQuestion[]>([]);
+  const [dpBulkHtmlText, setDpBulkHtmlText] = useState<string>('');
+  const [dpInputMode, setDpInputMode] = useState<'form' | 'bulkHtml'>('form');
+  const [dpSuccessMsg, setDpSuccessMsg] = useState<string | null>(null);
+  const [dpErrorMsg, setDpErrorMsg] = useState<string | null>(null);
+  const [dpSaving, setDpSaving] = useState(false);
+  const [dpPreviewQuestionIndex, setDpPreviewQuestionIndex] = useState<number | null>(null);
+
+  const fetchDailyPractice = async () => {
+    setDpLoading(true);
+    try {
+      const res = await fetch('/api/daily-practice');
+      if (res.ok) {
+        const data = await res.json();
+        setDpList(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch daily practice sets:", err);
+    } finally {
+      setDpLoading(false);
+    }
+  };
+
+  const handleResetDpForm = () => {
+    setDpEditingId(null);
+    setDpDate(new Date().toISOString().split('T')[0]);
+    setDpTitle('');
+    setDpDescription('');
+    setDpSubject('छत्तीसगढ़ सामान्य ज्ञान एवं समसामयिकी');
+    setDpTargetExam('CGPSC / व्यापमं');
+    setDpDuration(20);
+    setDpQuestions([]);
+    setDpBulkHtmlText('');
+    setDpSuccessMsg(null);
+    setDpErrorMsg(null);
+  };
+
+  const handleEditDpSet = (set: DailyPracticeSet) => {
+    setDpEditingId(set.id);
+    setDpDate(set.date || new Date().toISOString().split('T')[0]);
+    setDpTitle(set.title || '');
+    setDpDescription(set.description || '');
+    setDpSubject(set.subject || 'छत्तीसगढ़ सामान्य ज्ञान एवं समसामयिकी');
+    setDpTargetExam(set.targetExam || 'CGPSC / व्यापमं');
+    setDpDuration(set.durationMinutes || 20);
+    setDpQuestions(set.questions || []);
+    setDpBulkHtmlText('');
+    setDpInputMode('form');
+    setDpSuccessMsg(null);
+    setDpErrorMsg(null);
+    window.scrollTo({ top: 300, behavior: 'smooth' });
+  };
+
+  const handleDeleteDpSet = async (id: string) => {
+    if (!confirm("क्या आप वाकई इस डेली प्रैक्टिस सेट को हटाना चाहते हैं?")) return;
+    try {
+      const res = await fetch(`/api/daily-practice/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setDpSuccessMsg("डेली प्रैक्टिस सेट सफलतापूर्वक हटा दिया गया है!");
+        fetchDailyPractice();
+        if (dpEditingId === id) {
+          handleResetDpForm();
+        }
+      } else {
+        setDpErrorMsg("सेट हटाने में समस्या आई।");
+      }
+    } catch (err: any) {
+      setDpErrorMsg("त्रुटि: " + err.message);
+    }
+  };
+
+  const handleAddDpQuestion = () => {
+    const qCount = dpQuestions.length + 1;
+    const newQ: DailyPracticeQuestion = {
+      id: `dpq-${Date.now()}-${qCount}`,
+      questionHtml: `<b>प्रश्न ${qCount}:</b> यहाँ प्रश्न का एचटीएमएल (HTML) या प्लेन टेक्स्ट लिखें...`,
+      optionsHtml: ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"],
+      correctAnswer: 0,
+      explanationHtml: `<b>व्याख्या:</b> उत्तर की विस्तृत व्याख्या यहाँ लिखें...`
+    };
+    setDpQuestions([...dpQuestions, newQ]);
+  };
+
+  const handleRemoveDpQuestion = (idx: number) => {
+    const updated = dpQuestions.filter((_, i) => i !== idx);
+    setDpQuestions(updated);
+  };
+
+  const handleUpdateDpQuestion = (idx: number, field: keyof DailyPracticeQuestion, value: any) => {
+    const updated = [...dpQuestions];
+    updated[idx] = { ...updated[idx], [field]: value };
+    setDpQuestions(updated);
+  };
+
+  const handleUpdateDpOption = (qIdx: number, optIdx: number, value: string) => {
+    const updated = [...dpQuestions];
+    const opts = [...(updated[qIdx].optionsHtml || ['', '', '', ''])];
+    opts[optIdx] = value;
+    updated[qIdx] = { ...updated[qIdx], optionsHtml: opts };
+    setDpQuestions(updated);
+  };
+
+  const handleSaveDpSet = async () => {
+    if (!dpTitle.trim()) {
+      setDpErrorMsg("कृपया डेली प्रैक्टिस सेट का शीर्षक (Title) दर्ज करें।");
+      return;
+    }
+    if (dpQuestions.length === 0) {
+      setDpErrorMsg("कम से कम 1 प्रश्न जोड़ना अनिवार्य है।");
+      return;
+    }
+
+    setDpSaving(true);
+    setDpSuccessMsg(null);
+    setDpErrorMsg(null);
+
+    const payload: Partial<DailyPracticeSet> = {
+      id: dpEditingId || undefined,
+      date: dpDate,
+      title: dpTitle,
+      description: dpDescription,
+      subject: dpSubject,
+      targetExam: dpTargetExam,
+      durationMinutes: dpDuration,
+      questions: dpQuestions,
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      const url = dpEditingId ? `/api/daily-practice/${dpEditingId}` : '/api/daily-practice';
+      const method = dpEditingId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setDpSuccessMsg("डेली प्रैक्टिस सेट सफलतापूर्वक सहेजा एवं वेबसाइट पर लाइव कर दिया गया है!");
+        fetchDailyPractice();
+        if (onRefreshQuestions) onRefreshQuestions();
+      } else {
+        const errJson = await res.json();
+        setDpErrorMsg(errJson.error || "डेली प्रैक्टिस सेट सहेजने में विफल।");
+      }
+    } catch (err: any) {
+      setDpErrorMsg("सर्वर त्रुटि: " + err.message);
+    } finally {
+      setDpSaving(false);
+    }
+  };
+
+  const handleLoadSampleHtml = () => {
+    const sampleHtml = `<div class="question-block">
+  <p><b>प्रश्न 1:</b> छत्तीसगढ़ में <i>'भारत छोड़ो आंदोलन'</i> (1942) के समय रायपुर डायनामाइट कांड के मुख्य नायक कौन थे?</p>
+  <div class="options">
+    <p>A. परसराम सोनी</p>
+    <p>B. ईश्वरी चरण शुक्ल</p>
+    <p>C. ठाकुर प्यारेलाल सिंह</p>
+    <p>D. खूबचंद बघेल</p>
+  </div>
+  <p class="answer">B</p>
+  <div class="explanation"><b>विस्तृत समाधान:</b> रायपुर डायनामाइट कांड के मुख्य सूत्रधार ईश्वरी चरण शुक्ल थे। इसमें रायपुर जेल की दीवार को उड़ाकर सेनानियों को बाहर निकालने की योजना थी।</div>
+</div>
+
+<div class="question-block">
+  <p><b>प्रश्न 2:</b> छत्तीसगढ़ की सबसे लंबी सीमा छूने वाला पड़ोसी राज्य कौन सा है?</p>
+  <div class="options">
+    <p>A. मध्य प्रदेश</p>
+    <p>B. ओडिशा</p>
+    <p>C. महाराष्ट्र</p>
+    <p>D. उत्तर प्रदेश</p>
+  </div>
+  <p class="answer">B</p>
+  <div class="explanation"><b>व्याख्या:</b> ओडिशा राज्य के साथ छत्तीसगढ़ की सबसे लंबी भू-सीमा साझा होती है (लगभग 8 जिले सीमा बनाते हैं)।</div>
+</div>`;
+    setDpBulkHtmlText(sampleHtml);
+  };
+
+  const handleParseBulkHtml = () => {
+    if (!dpBulkHtmlText.trim()) {
+      setDpErrorMsg("कृपया पहले एचटीएमएल कोड बॉक्स में प्रश्न/कोड दर्ज करें।");
+      return;
+    }
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(dpBulkHtmlText, 'text/html');
+      const blocks = doc.querySelectorAll('.question-block, .dp-question, .question, .item');
+      
+      const parsedList: DailyPracticeQuestion[] = [];
+
+      if (blocks.length > 0) {
+        blocks.forEach((b, i) => {
+          const qEl = b.querySelector('p, h3, h4, b') || b;
+          const optsEls = Array.from(b.querySelectorAll('.options p, .options li, .option, li'));
+          const ansEl = b.querySelector('.answer, .ans');
+          const expEl = b.querySelector('.explanation, .exp, .sol');
+
+          let ansIdx = 0;
+          if (ansEl) {
+            const txt = ansEl.textContent?.trim().toUpperCase() || '';
+            if (txt.includes('B') || txt === '2' || txt === '1') ansIdx = 1;
+            else if (txt.includes('C') || txt === '3' || txt === '2') ansIdx = 2;
+            else if (txt.includes('D') || txt === '4' || txt === '3') ansIdx = 3;
+          }
+
+          let opts = optsEls.map(o => o.innerHTML);
+          if (opts.length < 4) {
+            opts = ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"];
+          }
+
+          parsedList.push({
+            id: `dpq-parse-${Date.now()}-${i}`,
+            questionHtml: qEl.innerHTML,
+            optionsHtml: opts.slice(0, 4),
+            correctAnswer: ansIdx,
+            explanationHtml: expEl ? expEl.innerHTML : ''
+          });
+        });
+      } else {
+        // Text block fallback
+        const items = dpBulkHtmlText.split(/(?:<div|\n\s*\n)/i).filter(x => x.trim().length > 15);
+        items.forEach((item, i) => {
+          parsedList.push({
+            id: `dpq-parse-${Date.now()}-${i}`,
+            questionHtml: `<b>प्रश्न ${i + 1}:</b> ` + item.substring(0, 150),
+            optionsHtml: ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"],
+            correctAnswer: 0,
+            explanationHtml: item
+          });
+        });
+      }
+
+      if (parsedList.length > 0) {
+        setDpQuestions(parsedList);
+        setDpInputMode('form');
+        setDpSuccessMsg(`सफलतापूर्वक ${parsedList.length} प्रश्न एचटीएमएल कोड से निकाल लिए गए हैं! आप प्रत्येक प्रश्न की जांच एवं संपादन कर सकते हैं।`);
+      } else {
+        setDpErrorMsg("एचटीएमएल पार्स नहीं हो सका। कृपया दिए गए नमूना HTML कोड टेम्पलेट का पालन करें।");
+      }
+    } catch (err: any) {
+      setDpErrorMsg("पार्सिंग त्रुटि: " + err.message);
+    }
+  };
+
   // Preset Subjects
   const subjectsPreset = [
     "Chhattisgarh General Knowledge",
@@ -232,6 +483,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     fetchSettings();
     fetchCurrentAffairs();
     fetchExams();
+    fetchDailyPractice();
 
     return () => unsubscribe();
   }, []);
@@ -276,12 +528,6 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
 
         setGoogleAppsScriptUrl(data.googleAppsScriptUrl || '');
         setInputAppsScriptUrl(data.googleAppsScriptUrl || '');
-
-        setGoogleAppsScriptUrlPyq(data.googleAppsScriptUrlPyq || '');
-        setInputAppsScriptUrlPyq(data.googleAppsScriptUrlPyq || '');
-
-        setGoogleAppsScriptUrlSubject(data.googleAppsScriptUrlSubject || '');
-        setInputAppsScriptUrlSubject(data.googleAppsScriptUrlSubject || '');
       }
     } catch (err) {
       console.error("Failed to fetch settings:", err);
@@ -360,17 +606,6 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     });
   }, [questions, auditType, auditSubject, auditExam, auditStatus, auditSearch]);
 
-  // Ref for auto smooth scroll to question editor
-  const questionEditorRef = useRef<HTMLDivElement>(null);
-
-  const scrollToQuestionEditor = () => {
-    if (questionEditorRef.current) {
-      const yOffset = -80; // offset for top sticky app header
-      const y = questionEditorRef.current.getBoundingClientRect().top + window.scrollY + yOffset;
-      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
-    }
-  };
-
   // Keep active editing question in sync with current index
   useEffect(() => {
     if (filteredAuditQuestions.length > 0) {
@@ -381,10 +616,6 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
           ...target,
           options_hi: target.options_hi ? [...target.options_hi] : ['', '', '', ''],
         });
-        // Auto scroll to top of question editor on question change
-        setTimeout(() => {
-          scrollToQuestionEditor();
-        }, 50);
       }
     } else {
       setAuditEditingQuestion(null);
@@ -456,13 +687,11 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
 
         let statusText = "सफलतापूर्वक सहेजा गया!";
         if (data.sheetSynced) {
-          statusText += " (गूगल शीट ऑटो-अपडेट हुआ ✓)";
-        } else if (data.syncError) {
-          statusText += ` (डेटाबेस सहेजा गया | गूगल शीट सिंक चेतावनी: ${data.syncError})`;
-        } else if (googleAppsScriptUrl || googleAppsScriptUrlPyq || googleAppsScriptUrlSubject) {
-          statusText += " (वेबसाइट डेटाबेस सहेजा गया | गूगल शीट सिंक नहीं हो सका)";
+          statusText += " (गूगल शीट लाइव अपडेट हुआ ✓)";
+        } else if (googleAppsScriptUrl) {
+          statusText += " (वेबसाइट डेटाबेस सहेजा गया - गूगल शीट वेबहुक सिंक चेतावनी)";
         } else {
-          statusText += " (वेबसाइट डेटाबेस अद्यतन हुआ)";
+          statusText += " (वेबसाइट डेटाबेस अपडेट हुआ)";
         }
 
         setAuditSaveMsg({ type: 'success', text: statusText });
@@ -511,45 +740,12 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const handleSaveAppsScriptUrl = async () => {
     setAppsScriptSaving(true);
     setAppsScriptSuccess(null);
-    const ok = await saveSettingField({
-      googleAppsScriptUrl: inputAppsScriptUrl.trim(),
-      googleAppsScriptUrlPyq: inputAppsScriptUrlPyq.trim(),
-      googleAppsScriptUrlSubject: inputAppsScriptUrlSubject.trim()
-    });
+    const ok = await saveSettingField({ googleAppsScriptUrl: inputAppsScriptUrl.trim() });
     if (ok) {
       setGoogleAppsScriptUrl(inputAppsScriptUrl.trim());
-      setGoogleAppsScriptUrlPyq(inputAppsScriptUrlPyq.trim());
-      setGoogleAppsScriptUrlSubject(inputAppsScriptUrlSubject.trim());
-      setAppsScriptSuccess("गूगल एप्स स्क्रिप्ट (Google Apps Script) वेबहुक URLs सफलतापूर्वक सहेजे गए!");
+      setAppsScriptSuccess("गूगल एप्स स्क्रिप्ट (Google Apps Script) वेबहुक URL सफलतापूर्वक सहेजा गया!");
     }
     setAppsScriptSaving(false);
-  };
-
-  const [isSyncingAllPyq, setIsSyncingAllPyq] = useState(false);
-  const [isSyncingAllSubject, setIsSyncingAllSubject] = useState(false);
-
-  const handleBulkSyncAll = async (type: 'pyq' | 'subject') => {
-    if (type === 'pyq') setIsSyncingAllPyq(true);
-    else setIsSyncingAllSubject(true);
-
-    try {
-      const res = await fetch('/api/sync-all-to-sheet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheetType: type })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(`✅ ${data.message}`);
-      } else {
-        alert(`❌ त्रुटि: ${data.error}`);
-      }
-    } catch (err: any) {
-      alert(`❌ नेटवर्क त्रुटि: ${err.message || 'गूगल शीट सिंक करने में विफल'}`);
-    } finally {
-      if (type === 'pyq') setIsSyncingAllPyq(false);
-      else setIsSyncingAllSubject(false);
-    }
   };
 
   const handleExportCSV = () => {
@@ -601,6 +797,82 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
       setSheetError("शीट आईडी सहेजने में त्रुटि हुई।");
     }
     setSheetSyncing(false);
+  };
+
+  const handleDisconnectSheets = async () => {
+    if (!confirm("क्या आप वाकई सभी गूगल शीट्स (Google Sheets) के लिंक एवं IDs को डिस्कनेक्ट करना चाहते हैं?")) {
+      return;
+    }
+    setSheetSyncing(true);
+    setSheetError(null);
+    setSheetSuccess(null);
+
+    const ok = await saveSettingField({
+      spreadsheetIdPyq: '',
+      spreadsheetIdSubject: '',
+      spreadsheetIdCurrentAffairs: '',
+      spreadsheetId: ''
+    });
+
+    if (ok) {
+      setInputPyq('');
+      setInputSubject('');
+      setInputCA('');
+      setSpreadsheetIdPyq('');
+      setSpreadsheetIdSubject('');
+      setSpreadsheetIdCA('');
+      setSheetPreviewData([]);
+      setSheetSuccess("सभी गूगल शीट लिंक/IDs सफलतापूर्वक डिस्कनेक्ट कर दिए गए हैं!");
+    } else {
+      setSheetError("गूगल शीट डिस्कनेक्ट करने में त्रुटि हुई।");
+    }
+    setSheetSyncing(false);
+  };
+
+  const handleDisconnectSingleSheet = async (type: 'pyq' | 'subject' | 'currentAffairs') => {
+    setSheetSyncing(true);
+    setSheetError(null);
+    setSheetSuccess(null);
+
+    let fieldsToSave: Record<string, string> = {};
+    if (type === 'pyq') fieldsToSave = { spreadsheetIdPyq: '' };
+    else if (type === 'subject') fieldsToSave = { spreadsheetIdSubject: '' };
+    else if (type === 'currentAffairs') fieldsToSave = { spreadsheetIdCurrentAffairs: '' };
+
+    const ok = await saveSettingField(fieldsToSave);
+    if (ok) {
+      if (type === 'pyq') {
+        setInputPyq('');
+        setSpreadsheetIdPyq('');
+      } else if (type === 'subject') {
+        setInputSubject('');
+        setSpreadsheetIdSubject('');
+      } else if (type === 'currentAffairs') {
+        setInputCA('');
+        setSpreadsheetIdCA('');
+      }
+      setSheetSuccess("गूगल शीट सफलतापूर्वक डिस्कनेक्ट हो गई!");
+    } else {
+      setSheetError("डिस्कनेक्ट करने में त्रुटि हुई।");
+    }
+    setSheetSyncing(false);
+  };
+
+  const handleDisconnectAppsScript = async () => {
+    if (!confirm("क्या आप वाकई गूगल ऐप्स स्क्रिप्ट (Google Apps Script) वेबहुक URL को डिस्कनेक्ट करना चाहते हैं?")) {
+      return;
+    }
+    setAppsScriptSaving(true);
+    setAppsScriptSuccess(null);
+    const ok = await saveSettingField({ googleAppsScriptUrl: '' });
+    if (ok) {
+      setGoogleAppsScriptUrl('');
+      setInputAppsScriptUrl('');
+      setAppsScriptSuccess("गूगल ऐप्स स्क्रिप्ट URL सफलतापूर्वक डिस्कनेक्ट कर दिया गया है!");
+    } else {
+      alert("डिस्कनेक्ट करने में त्रुटि हुई।");
+    }
+    setAppsScriptSaving(false);
   };
 
   const handlePullSheet = async (
@@ -1007,12 +1279,6 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     appendToRichContent(`<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 underline font-extrabold hover:text-emerald-800">${text} ↗</a>`);
   };
 
-  const handleInsertImage = () => {
-    const url = prompt("छवि का URL दर्ज करें (Image URL):", "https://");
-    if (!url) return;
-    appendToRichContent(`<div class="my-4"><img src="${url}" alt="Image" class="rounded-2xl max-w-full h-auto border border-gray-200 shadow-sm mx-auto" /></div>`);
-  };
-
   const handleInsertPdfBtn = () => {
     const title = prompt("PDF बटन का नाम:", "आधिकारिक सिलेबस PDF डाउनलोड करें");
     if (!title) return;
@@ -1319,6 +1585,27 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     }
   };
 
+  const handleDeleteAllQuestions = async () => {
+    if (questions.length === 0) {
+      alert("डेटाबेस में कोई प्रश्न मौजूद नहीं है।");
+      return;
+    }
+    if (!confirm(`क्या आप वाकई डेटाबेस के सभी (${questions.length}) प्रश्नों को डिलीट करना चाहते हैं?\n\nयह क्रिया वापस नहीं ली जा सकती!`)) return;
+
+    try {
+      const res = await fetch('/api/questions/all', { method: 'DELETE' });
+      if (res.ok) {
+        alert("सभी प्रश्न सफलतापूर्वक डिलीट कर दिए गए हैं।");
+        onRefreshQuestions();
+      } else {
+        alert("सभी प्रश्न डिलीट करने में विफलता।");
+      }
+    } catch (err: any) {
+      console.error("Delete all error:", err);
+      alert("सर्वर त्रुटि: " + (err.message || String(err)));
+    }
+  };
+
   const filteredQuestions = questions.filter(q => 
     q.text_hi.toLowerCase().includes(searchQuery.toLowerCase()) ||
     q.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1431,35 +1718,30 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-            <Database className="h-3.5 w-3.5 text-emerald-600" />
-            <span>डेटाबेस: <strong>{questions.length}</strong> प्रश्न</span>
-          </div>
-
+        <div className="flex items-center gap-2">
           {isAuthorizedAdmin && (
             <button
               onClick={handleLogout}
-              className="bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-600 text-xs font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-gray-200"
+              className="bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-600 text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 cursor-pointer border border-gray-200"
             >
-              <LogOut className="h-3.5 w-3.5" /> लॉग आउट
+              <LogOut className="h-4 w-4" /> लॉग आउट (Logout)
             </button>
           )}
         </div>
       </div>
 
       {/* Main Subtab Navigation */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 pb-3">
         <button
-          onClick={() => setActiveSubTab('proofread')}
+          onClick={() => setActiveSubTab('dailyPractice')}
           className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
-            activeSubTab === 'proofread'
-              ? 'bg-amber-600 text-white shadow-md ring-2 ring-amber-300'
-              : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200'
+            activeSubTab === 'dailyPractice'
+              ? 'bg-emerald-700 text-white shadow-md ring-2 ring-emerald-300'
+              : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100 border border-emerald-200'
           }`}
         >
-          <Wand2 className="h-4 w-4 text-amber-500 animate-pulse" />
-          🔍 प्रश्न समीक्षा व ऑड़िट
+          <Sparkles className="h-4 w-4 text-amber-500 animate-bounce" />
+          ⚡ डेली प्रैक्टिस प्रबंधन (Daily 20-25 Questions)
         </button>
 
         <button
@@ -1470,20 +1752,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
               : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
           }`}
         >
-          <Database className="h-4 w-4 text-emerald-600" />
-          📊 गूगल शीट व ऑटो-सिंक हब
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('excel')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
-            activeSubTab === 'excel'
-              ? 'bg-emerald-800 text-white shadow-sm'
-              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
-          }`}
-        >
-          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-          📁 एक्सेल अपलोड
+          <Database className="h-4 w-4" /> गूगल शीट सिंक
         </button>
 
         <button
@@ -1505,12 +1774,482 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
               : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
           }`}
         >
-          <GraduationCap className="h-4 w-4 text-blue-600" /> परीक्षा जानकारी (CMS)
+          <GraduationCap className="h-4 w-4" /> परीक्षा जानकारी (Word सम्पादक)
         </button>
       </div>
 
       {/* Tab Panels */}
       <div className="space-y-6">
+
+        {/* DAILY PRACTICE MANAGER TAB */}
+        {activeSubTab === 'dailyPractice' && (
+          <div className="space-y-8 animate-fadeIn">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 text-white p-6 rounded-3xl shadow-md border border-emerald-700/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <span className="text-[11px] font-extrabold text-amber-300 bg-amber-400/20 px-3 py-1 rounded-full border border-amber-300/30 inline-flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-300" /> डेली 20-25 प्रश्न प्रबंधन प्रणाली
+                </span>
+                <h2 className="text-xl font-extrabold text-white">
+                  डेली प्रैक्टिस सेट सम्पादक (Daily Practice Manager)
+                </h2>
+                <p className="text-xs text-emerald-100 font-medium max-w-2xl leading-relaxed">
+                  वेबसाइट कोड को अपडेट किए बिना यहाँ से रोज 20 से 25 नए वस्तुनिष्ठ प्रश्न एचटीएमएल कोड (HTML) या सीधे फॉर्म द्वारा जोड़ें एवं तुरंत लाइव करें।
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleResetDpForm}
+                  className="bg-white/10 hover:bg-white/20 text-white font-extrabold px-4 py-2.5 rounded-xl text-xs transition border border-white/20 cursor-pointer flex items-center gap-1.5"
+                >
+                  <PlusCircle className="h-4 w-4 text-emerald-300" /> नया सेट बनाएं
+                </button>
+              </div>
+            </div>
+
+            {/* Status Alert Messages */}
+            {dpSuccessMsg && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-4 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
+                  <span>{dpSuccessMsg}</span>
+                </div>
+                <button onClick={() => setDpSuccessMsg(null)} className="text-emerald-700 hover:text-emerald-950 text-xs">✕</button>
+              </div>
+            )}
+
+            {dpErrorMsg && (
+              <div className="bg-red-50 border border-red-200 text-red-900 p-4 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+                  <span>{dpErrorMsg}</span>
+                </div>
+                <button onClick={() => setDpErrorMsg(null)} className="text-red-700 hover:text-red-950 text-xs">✕</button>
+              </div>
+            )}
+
+            {/* Set Details Form */}
+            <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-6">
+              <div className="border-b border-gray-100 pb-4 flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                  <Edit3 className="h-4 w-4 text-emerald-600" />
+                  {dpEditingId ? "दैनिक अभ्यास सेट संशोधित करें (Edit Set)" : "नया दैनिक अभ्यास सेट बनाएं (Create Daily Set)"}
+                </h3>
+                {dpEditingId && (
+                  <span className="text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-md font-mono font-bold border border-amber-200">
+                    संशोधित हो रहा है: {dpEditingId}
+                  </span>
+                )}
+              </div>
+
+              {/* Set Metadata Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">दिनांक (Date)*</label>
+                  <input
+                    type="date"
+                    value={dpDate}
+                    onChange={(e) => setDpDate(e.target.value)}
+                    className="w-full p-2.5 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-gray-50/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">लक्ष्य परीक्षा (Target Exam)</label>
+                  <input
+                    type="text"
+                    value={dpTargetExam}
+                    onChange={(e) => setDpTargetExam(e.target.value)}
+                    placeholder="उदा. CGPSC Prelims / व्यापमं"
+                    className="w-full p-2.5 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-gray-50/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">विषय (Subject Category)</label>
+                  <input
+                    type="text"
+                    value={dpSubject}
+                    onChange={(e) => setDpSubject(e.target.value)}
+                    placeholder="उदा. छत्तीसगढ़ सामान्य ज्ञान"
+                    className="w-full p-2.5 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-gray-50/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">समय सीमा (Minutes)</label>
+                  <input
+                    type="number"
+                    value={dpDuration}
+                    onChange={(e) => setDpDuration(parseInt(e.target.value) || 20)}
+                    className="w-full p-2.5 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-gray-50/50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">सेट का शीर्षक (Set Title)*</label>
+                <input
+                  type="text"
+                  value={dpTitle}
+                  onChange={(e) => setDpTitle(e.target.value)}
+                  placeholder="उदा. डेली प्रैक्टिस सेट - 29 जुलाई 2026 (छत्तीसगढ़ सामान्य ज्ञान एवं समसामयिकी 25 प्रश्न)"
+                  className="w-full p-3 text-xs sm:text-sm font-bold border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">विवरण (Short Description)</label>
+                <input
+                  type="text"
+                  value={dpDescription}
+                  onChange={(e) => setDpDescription(e.target.value)}
+                  placeholder="उदा. आज के इस सेट में छत्तीसगढ़ इतिहास, जनजातियां एवं करंट अफेयर्स के 25 महत्वपूर्ण वस्तुनिष्ठ प्रश्न शामिल हैं..."
+                  className="w-full p-2.5 text-xs font-medium border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Input Mode Selector Tabs */}
+              <div className="pt-2 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs font-extrabold text-gray-800 uppercase tracking-wider">
+                    प्रश्न जोड़ने का तरीका (Question Entry Mode):
+                  </p>
+                  <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setDpInputMode('form')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                        dpInputMode === 'form' 
+                          ? 'bg-emerald-600 text-white shadow-2xs' 
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <List className="h-3.5 w-3.5" /> प्रश्न-दर-प्रश्न सम्पादक ({dpQuestions.length} प्रश्न)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDpInputMode('bulkHtml')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                        dpInputMode === 'bulkHtml' 
+                          ? 'bg-emerald-600 text-white shadow-2xs' 
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <Code2 className="h-3.5 w-3.5" /> बल्क HTML कोड पार्सर
+                    </button>
+                  </div>
+                </div>
+
+                {/* MODE 1: BULK HTML CODE PARSER */}
+                {dpInputMode === 'bulkHtml' && (
+                  <div className="bg-slate-900 text-white rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                      <div>
+                        <h4 className="text-xs font-extrabold text-emerald-400 flex items-center gap-1.5">
+                          <FileCode className="h-4 w-4" /> बल्क HTML कोड पेस्ट एवं पार्सर
+                        </h4>
+                        <p className="text-[11px] text-slate-400">
+                          अपने 20-25 प्रश्नों का HTML कोड नीचे बॉक्स में पेस्ट करें और "पार्स करें" पर क्लिक करें।
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleLoadSampleHtml}
+                          className="bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1"
+                        >
+                          <Copy className="h-3.5 w-3.5" /> नमूना HTML कोड लोड करें
+                        </button>
+                      </div>
+                    </div>
+
+                    <textarea
+                      rows={12}
+                      value={dpBulkHtmlText}
+                      onChange={(e) => setDpBulkHtmlText(e.target.value)}
+                      placeholder="यहाँ अपना HTML प्रश्न कोड पेस्ट करें..."
+                      className="w-full p-4 font-mono text-xs bg-slate-950 text-emerald-300 border border-slate-800 rounded-xl focus:ring-2 focus:ring-emerald-500 leading-relaxed"
+                    />
+
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-[11px] text-slate-400">
+                        टिप: नमूना कोड लोड करके प्रारूप समझें।
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleParseBulkHtml}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-6 py-2.5 rounded-xl text-xs transition flex items-center gap-2 cursor-pointer shadow-md"
+                      >
+                        <Wand2 className="h-4 w-4 text-amber-300 animate-pulse" /> एचटीएमएल कोड से प्रश्न निकालें (Parse HTML)
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODE 2: STEP-BY-STEP QUESTION FORM BUILDER */}
+                {dpInputMode === 'form' && (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                      <div>
+                        <span className="text-xs font-extrabold text-emerald-900 block">
+                          सेट में कुल प्रश्न संख्या: {dpQuestions.length}
+                        </span>
+                        <span className="text-[11px] text-emerald-700">
+                          (प्रत्येक प्रश्न में आप H1, H2, Bold, Table, Image या HTML टैग उपयोग कर सकते हैं)
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleAddDpQuestion}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      >
+                        <PlusCircle className="h-4 w-4" /> नया प्रश्न जोड़ें (+ Add Question)
+                      </button>
+                    </div>
+
+                    {dpQuestions.length === 0 ? (
+                      <div className="text-center py-10 bg-gray-50 border border-dashed border-gray-300 rounded-2xl space-y-3">
+                        <BookOpen className="h-10 w-10 text-gray-300 mx-auto" />
+                        <p className="text-xs font-bold text-gray-600">
+                          अभी इस सेट में कोई प्रश्न नहीं है।
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleAddDpQuestion}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition cursor-pointer"
+                        >
+                          + पहला प्रश्न जोड़ें
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        {dpQuestions.map((q, qIdx) => (
+                          <div 
+                            key={q.id || qIdx}
+                            className="bg-gray-50/70 border border-gray-200 rounded-2xl p-5 space-y-4 relative group hover:border-emerald-300 transition"
+                          >
+                            {/* Question Header Controls */}
+                            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+                              <span className="text-xs font-extrabold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200">
+                                प्रश्न क्रमांक #{qIdx + 1}
+                              </span>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setDpPreviewQuestionIndex(dpPreviewQuestionIndex === qIdx ? null : qIdx)}
+                                  className="text-xs font-bold text-gray-700 hover:bg-gray-200 px-2.5 py-1 rounded-lg border border-gray-300 transition flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                                  {dpPreviewQuestionIndex === qIdx ? 'संपादन विधा' : 'लाइव प्रिव्यू'}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDpQuestion(qIdx)}
+                                  className="text-xs font-bold text-red-600 hover:bg-red-50 p-1.5 rounded-lg border border-red-200 transition cursor-pointer"
+                                  title="यह प्रश्न हटाएँ"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Live Render Preview Card */}
+                            {dpPreviewQuestionIndex === qIdx ? (
+                              <div className="bg-white p-4 rounded-xl border border-emerald-200 space-y-3">
+                                <p className="text-xs font-extrabold text-emerald-800 uppercase">एचटीएमएल पूर्वावलोकन (Live Rendered View):</p>
+                                <div 
+                                  className="text-sm font-bold text-gray-900 leading-relaxed prose max-w-none"
+                                  dangerouslySetInnerHTML={{ __html: q.questionHtml }}
+                                />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                                  {q.optionsHtml.map((opt, oIdx) => (
+                                    <div 
+                                      key={oIdx}
+                                      className={`p-2.5 rounded-lg border text-xs font-medium flex items-center gap-2 ${
+                                        q.correctAnswer === oIdx 
+                                          ? 'bg-emerald-50 border-emerald-500 font-bold text-emerald-900' 
+                                          : 'bg-gray-50 border-gray-200'
+                                      }`}
+                                    >
+                                      <span className="font-bold">{String.fromCharCode(65 + oIdx)}.</span>
+                                      <div dangerouslySetInnerHTML={{ __html: opt }} />
+                                    </div>
+                                  ))}
+                                </div>
+                                {q.explanationHtml && (
+                                  <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-xs text-amber-950 font-medium">
+                                    <p className="font-bold text-amber-900 mb-1">व्याख्या:</p>
+                                    <div dangerouslySetInnerHTML={{ __html: q.explanationHtml }} />
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              /* Editable Question Form Fields */
+                              <div className="space-y-4">
+                                {/* Question HTML Input */}
+                                <div>
+                                  <label className="text-xs font-bold text-gray-700 block mb-1">
+                                    प्रश्न सामग्री / HTML कोड*
+                                  </label>
+                                  <textarea
+                                    rows={3}
+                                    value={q.questionHtml}
+                                    onChange={(e) => handleUpdateDpQuestion(qIdx, 'questionHtml', e.target.value)}
+                                    placeholder="यहाँ प्रश्न लिखें या HTML टैग उपयोग करें..."
+                                    className="w-full p-3 text-xs sm:text-sm font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+                                  />
+                                </div>
+
+                                {/* Options A, B, C, D */}
+                                <div className="space-y-2">
+                                  <label className="text-xs font-bold text-gray-700 block">
+                                    विकल्प (Options) एवं सही उत्तर का चयन करें:*
+                                  </label>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {['A', 'B', 'C', 'D'].map((optLabel, oIdx) => (
+                                      <div key={oIdx} className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUpdateDpQuestion(qIdx, 'correctAnswer', oIdx)}
+                                          className={`px-3 py-2 rounded-xl text-xs font-extrabold border transition cursor-pointer shrink-0 ${
+                                            q.correctAnswer === oIdx
+                                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                              : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
+                                          }`}
+                                          title="सही उत्तर घोषित करें"
+                                        >
+                                          {optLabel}. {q.correctAnswer === oIdx ? '✓ सही' : ''}
+                                        </button>
+                                        <input
+                                          type="text"
+                                          value={q.optionsHtml[oIdx] || ''}
+                                          onChange={(e) => handleUpdateDpOption(qIdx, oIdx, e.target.value)}
+                                          placeholder={`विकल्प ${optLabel}...`}
+                                          className="w-full p-2 text-xs font-medium border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Explanation HTML Input */}
+                                <div>
+                                  <label className="text-xs font-bold text-gray-700 block mb-1">
+                                    व्याख्या एवं सॉल्यूशन (Solution / Explanation HTML)
+                                  </label>
+                                  <textarea
+                                    rows={2}
+                                    value={q.explanationHtml || ''}
+                                    onChange={(e) => handleUpdateDpQuestion(qIdx, 'explanationHtml', e.target.value)}
+                                    placeholder="उत्तर का कारण एवं विस्तृत व्याख्या दर्ज करें..."
+                                    className="w-full p-2.5 text-xs font-medium border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Save Button */}
+              <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleResetDpForm}
+                  className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-xl transition cursor-pointer"
+                >
+                  रीसेट करें (Reset Form)
+                </button>
+
+                <button
+                  type="button"
+                  disabled={dpSaving}
+                  onClick={handleSaveDpSet}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold px-8 py-3 rounded-xl text-xs transition flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  <Save className="h-4 w-4 text-amber-300" />
+                  {dpSaving ? "सहेजा जा रहा है..." : "सहेजें एवं लाइव करें (Save & Publish Set)"}
+                </button>
+              </div>
+            </div>
+
+            {/* List of Existing Saved Sets */}
+            <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-emerald-600" />
+                  सहेजे गए डेली प्रैक्टिस सेट ({dpList.length})
+                </h3>
+                <button
+                  onClick={fetchDailyPractice}
+                  className="text-xs font-bold text-emerald-700 hover:bg-emerald-50 px-2.5 py-1 rounded-lg transition border border-emerald-200 cursor-pointer flex items-center gap-1"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> रिफ्रेश करें
+                </button>
+              </div>
+
+              {dpList.length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-6">कोई डेली प्रैक्टिस सेट उपलब्ध नहीं है।</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-700 border-b border-gray-200">
+                        <th className="p-3 font-extrabold">दिनांक</th>
+                        <th className="p-3 font-extrabold">शीर्षक</th>
+                        <th className="p-3 font-extrabold">लक्ष्य परीक्षा</th>
+                        <th className="p-3 font-extrabold">प्रश्न संख्या</th>
+                        <th className="p-3 font-extrabold text-right">कार्रवाई</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {dpList.map((item) => (
+                        <tr key={item.id} className="hover:bg-emerald-50/30 transition">
+                          <td className="p-3 font-bold text-emerald-800 whitespace-nowrap">
+                            {item.date}
+                          </td>
+                          <td className="p-3 font-extrabold text-gray-900">
+                            {item.title}
+                          </td>
+                          <td className="p-3 font-medium text-gray-600">
+                            {item.targetExam || '-'}
+                          </td>
+                          <td className="p-3 font-bold text-emerald-700">
+                            {item.questions?.length || 0} प्रश्न
+                          </td>
+                          <td className="p-3 text-right whitespace-nowrap space-x-2">
+                            <button
+                              onClick={() => handleEditDpSet(item)}
+                              className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-3 py-1.5 rounded-lg font-bold border border-emerald-200 transition cursor-pointer"
+                            >
+                              संपादित करें
+                            </button>
+                            <button
+                              onClick={() => handleDeleteDpSet(item.id)}
+                              className="bg-red-50 text-red-700 hover:bg-red-100 px-3 py-1.5 rounded-lg font-bold border border-red-200 transition cursor-pointer"
+                            >
+                              हटाएं
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* PROOFREADING & QUESTION AUDIT TAB */}
         {activeSubTab === 'proofread' && (
@@ -1541,14 +2280,23 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                     }`}
                   >
                     <Code2 className="h-4 w-4" />
-                    {googleAppsScriptUrl ? "🟢 लाइव वेबहुक" : "⚙️ सिंक सेटअप"}
+                    {googleAppsScriptUrl ? "🟢 गूगल शीट लाइव ऑटो-सिंक सक्रिय" : "⚙️ गूगल शीट ऑटो-सिंक सेटअप"}
                   </button>
 
                   <button
                     onClick={() => setIsExportModalOpen(true)}
                     className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer"
                   >
-                    <Download className="h-4 w-4 text-amber-300" /> CSV निर्यात
+                    <Download className="h-4 w-4 text-amber-300" /> Excel / CSV निर्यात
+                  </button>
+
+                  <button
+                    onClick={handleDeleteAllQuestions}
+                    disabled={questions.length === 0}
+                    className="bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-400/30 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="डेटाबेस के सभी प्रश्न डिलीट करें"
+                  >
+                    <Trash2 className="h-4 w-4 text-red-300" /> सभी प्रश्न डिलीट करें
                   </button>
                 </div>
               </div>
@@ -1694,33 +2442,62 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                     <p className="text-xs text-gray-500">कृपया ऊपर से फिल्टर या सर्च बदलें।</p>
                   </div>
                 ) : auditEditingQuestion ? (
-                  <div ref={questionEditorRef} className="space-y-4">
-                    {/* Pagination Header Bar (Clean Navigation Only) */}
-                    <div className="bg-amber-50/80 p-3 rounded-2xl border border-amber-200 flex items-center justify-between gap-3 shadow-2xs">
+                  <div className="space-y-4">
+                    {/* Pagination Header Bar */}
+                    <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
                       <div className="flex items-center gap-2 sm:gap-3">
                         <button
                           disabled={auditCurrentIndex === 0}
                           onClick={() => setAuditCurrentIndex((prev) => Math.max(0, prev - 1))}
-                          className="px-3 py-1.5 bg-white hover:bg-gray-100 disabled:opacity-40 border border-gray-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer text-gray-800"
+                          className="px-3 py-1.5 bg-white hover:bg-gray-100 disabled:opacity-40 border border-gray-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                         >
                           <ChevronLeft className="h-4 w-4" /> पिछला
                         </button>
 
-                        <span className="text-xs font-black text-amber-900 bg-amber-100 px-3 py-1 rounded-lg border border-amber-300">
+                        <span className="text-xs font-extrabold text-amber-900 bg-amber-100/80 px-3 py-1 rounded-lg border border-amber-300">
                           प्रश्न {auditCurrentIndex + 1} / {filteredAuditQuestions.length}
                         </span>
 
                         <button
                           disabled={auditCurrentIndex >= filteredAuditQuestions.length - 1}
                           onClick={() => setAuditCurrentIndex((prev) => Math.min(filteredAuditQuestions.length - 1, prev + 1))}
-                          className="px-3 py-1.5 bg-white hover:bg-gray-100 disabled:opacity-40 border border-gray-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer text-gray-800"
+                          className="px-3 py-1.5 bg-white hover:bg-gray-100 disabled:opacity-40 border border-gray-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                         >
                           अगला <ChevronRight className="h-4 w-4" />
                         </button>
                       </div>
 
-                      <div className="text-[11px] font-extrabold text-amber-800 hidden sm:block">
-                        समीक्षा व सम्पादन मोड (Question Review Mode)
+                      <div className="flex items-center gap-2">
+                        {/* Quick Clean Spaces Button */}
+                        <button
+                          onClick={handleCleanExtraSpaces}
+                          className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                          title="अतिरिक्त स्पेस साफ करें"
+                        >
+                          <Wand2 className="h-3.5 w-3.5 text-amber-600" /> स्पेस साफ करें
+                        </button>
+
+                        {/* Save Only */}
+                        <button
+                          disabled={auditSaving}
+                          onClick={() => handleSaveAuditQuestion(false)}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="सहेजें (उसी प्रश्न पर रहें)"
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          {auditSaving ? "सहेजा..." : "सहेजें"}
+                        </button>
+
+                        {/* Save & Next Action */}
+                        <button
+                          disabled={auditSaving}
+                          onClick={() => handleSaveAuditQuestion(true)}
+                          className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="सहेजें और अगला प्रश्न (Alt+S)"
+                        >
+                          <CheckCircle className="h-3.5 w-3.5" />
+                          {auditSaving ? "सहेजा..." : "सहेजें और अगला (Alt+S)"}
+                        </button>
                       </div>
                     </div>
 
@@ -1749,46 +2526,44 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                           </span>
                         </div>
 
-                        {/* Classification Info: Subject, Topic, Exam, Year */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/70 p-3 rounded-2xl border border-gray-100">
+                        {/* Classification Info */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <label className="text-[11px] font-extrabold text-gray-800 block mb-1">विषय (Subject)*</label>
+                            <label className="text-[11px] font-bold text-gray-700 block mb-1">विषय (Subject)*</label>
                             <input
                               type="text"
-                              placeholder="उदा. Chhattisgarh General Knowledge"
                               value={auditEditingQuestion.subject || ''}
                               onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, subject: e.target.value })}
-                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-white"
+                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50/50"
                             />
                           </div>
                           <div>
-                            <label className="text-[11px] font-extrabold text-gray-800 block mb-1">टॉपिक / अध्याय (Topic)*</label>
+                            <label className="text-[11px] font-bold text-gray-700 block mb-1">टॉपिक (Topic)</label>
                             <input
                               type="text"
-                              placeholder="उदा. CG Geography & Rivers"
                               value={auditEditingQuestion.topic || ''}
                               onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, topic: e.target.value })}
-                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-white"
+                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50/50"
                             />
                           </div>
                           <div>
-                            <label className="text-[11px] font-extrabold text-gray-800 block mb-1">परीक्षा (Exam Name - for PYQ)</label>
+                            <label className="text-[11px] font-bold text-gray-700 block mb-1">परीक्षा नाम (Exam Name - for PYQ)</label>
                             <input
                               type="text"
-                              placeholder="उदा. CGPSC Prelims"
+                              placeholder="उदा. CGPSC Prelims 2023"
                               value={auditEditingQuestion.exam || ''}
                               onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, exam: e.target.value })}
-                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-white"
+                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50/50"
                             />
                           </div>
                           <div>
-                            <label className="text-[11px] font-extrabold text-gray-800 block mb-1">वर्ष (Year)</label>
+                            <label className="text-[11px] font-bold text-gray-700 block mb-1">वर्ष (Year)</label>
                             <input
                               type="number"
                               placeholder="2023"
                               value={auditEditingQuestion.year || ''}
                               onChange={(e) => setAuditEditingQuestion({ ...auditEditingQuestion, year: parseInt(e.target.value) || undefined })}
-                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-white"
+                              className="w-full p-2 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50/50"
                             />
                           </div>
                         </div>
@@ -1819,51 +2594,23 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                           <div className="flex items-center justify-between">
                             <label className="text-[11px] font-bold text-gray-700 block">विकल्प (Options A, B, C, D) व सही उत्तर चुनिए*</label>
                             <span className="text-[10px] text-emerald-700 font-extrabold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                              {(auditEditingQuestion.is_deleted || auditEditingQuestion.correctAnswer === -1)
-                                ? "⚠️ विलोपित प्रश्न (* Star Mark)"
-                                : `सही उत्तर: विकल्प ${String.fromCharCode(65 + (auditEditingQuestion.correctAnswer ?? 0))}`}
+                              सही उत्तर: विकल्प {String.fromCharCode(65 + (auditEditingQuestion.correctAnswer ?? 0))}
                             </span>
-                          </div>
-
-                          {/* Star Mark (*) / Cancelled Question Button */}
-                          <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-2">
-                            <div className="text-[11px] text-amber-900 font-semibold">
-                              <span className="font-extrabold block">⭐ आयोग द्वारा विलोपित प्रश्न (Invalidated / Deleted Question)?</span>
-                              <span className="text-[10px] text-amber-800">गूगल शीट में उत्तर कॉलम में '*' या 'vifopit' लिखने पर यह ऑटो-सेट होता है।</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const isCurDel = Boolean(auditEditingQuestion.is_deleted || auditEditingQuestion.correctAnswer === -1);
-                                setAuditEditingQuestion({
-                                  ...auditEditingQuestion,
-                                  is_deleted: !isCurDel,
-                                  correctAnswer: !isCurDel ? -1 : 0
-                                });
-                              }}
-                              className={`px-3 py-1.5 rounded-xl border text-xs font-black transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                                (auditEditingQuestion.is_deleted || auditEditingQuestion.correctAnswer === -1)
-                                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                                  : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-100'
-                              }`}
-                            >
-                              ⭐ {(auditEditingQuestion.is_deleted || auditEditingQuestion.correctAnswer === -1) ? 'विलोपित प्रश्न (सेट है)' : 'विलोपित प्रश्न मार्क करें'}
-                            </button>
                           </div>
 
                           {['A', 'B', 'C', 'D'].map((optLabel, idx) => (
                             <div key={idx} className="flex items-center gap-2">
                               {/* Radio selector for correct answer */}
                               <label className={`p-2 rounded-xl border flex items-center gap-1.5 cursor-pointer text-xs font-extrabold transition ${
-                                !(auditEditingQuestion.is_deleted || auditEditingQuestion.correctAnswer === -1) && (auditEditingQuestion.correctAnswer ?? 0) === idx
+                                (auditEditingQuestion.correctAnswer ?? 0) === idx
                                   ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
                                   : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
                               }`}>
                                 <input
                                   type="radio"
                                   name="correctOptionRadio"
-                                  checked={!(auditEditingQuestion.is_deleted || auditEditingQuestion.correctAnswer === -1) && (auditEditingQuestion.correctAnswer ?? 0) === idx}
-                                  onChange={() => setAuditEditingQuestion({ ...auditEditingQuestion, is_deleted: false, correctAnswer: idx })}
+                                  checked={(auditEditingQuestion.correctAnswer ?? 0) === idx}
+                                  onChange={() => setAuditEditingQuestion({ ...auditEditingQuestion, correctAnswer: idx })}
                                   className="hidden"
                                 />
                                 <span>{optLabel}.</span>
@@ -1879,7 +2626,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                                   setAuditEditingQuestion({ ...auditEditingQuestion, options_hi: updatedOpts });
                                 }}
                                 className={`w-full p-2.5 text-xs font-semibold border rounded-xl focus:ring-2 focus:ring-amber-500 font-sans ${
-                                  !(auditEditingQuestion.is_deleted || auditEditingQuestion.correctAnswer === -1) && (auditEditingQuestion.correctAnswer ?? 0) === idx
+                                  (auditEditingQuestion.correctAnswer ?? 0) === idx
                                     ? 'border-emerald-300 bg-emerald-50/30'
                                     : 'border-gray-200 bg-white'
                                 }`}
@@ -2005,7 +2752,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                     </div>
 
                     {/* BOTTOM PRIMARY ACTION & NAVIGATION BAR */}
-                    <div className="bg-slate-900 text-white p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4 relative mt-6">
+                    <div className="bg-slate-900 text-white p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4 sticky bottom-4 z-40 mt-6">
                       {/* Prev / Counter / Next Navigation */}
                       <div className="flex items-center gap-2.5 w-full md:w-auto justify-between md:justify-start">
                         <button
@@ -2152,15 +2899,6 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
               <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsAppsScriptModalOpen(true)}
-                  className="bg-purple-700 hover:bg-purple-800 text-white font-extrabold px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 shadow-sm cursor-pointer"
-                >
-                  <Code2 className="h-4 w-4" />
-                  वेबहुक कोड व निर्देश
-                </button>
-
-                <button
-                  type="button"
                   onClick={handleSyncAllSheets}
                   disabled={sheetSyncing}
                   className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 shadow-sm cursor-pointer"
@@ -2176,6 +2914,16 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                   className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold px-3.5 py-2.5 rounded-xl text-xs transition cursor-pointer border border-gray-200"
                 >
                   केवल IDs सहेजें
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDisconnectSheets}
+                  disabled={sheetSyncing || (!inputPyq && !inputSubject && !inputCA && !spreadsheetIdPyq && !spreadsheetIdSubject && !spreadsheetIdCA)}
+                  className="bg-red-50 hover:bg-red-100 text-red-700 disabled:opacity-40 font-bold px-3.5 py-2.5 rounded-xl text-xs transition cursor-pointer border border-red-200 flex items-center gap-1.5"
+                  title="सभी गूगल शीट लिंक्स को डिस्कनेक्ट करें"
+                >
+                  <Unlink className="h-4 w-4 text-red-600" /> डिस्कनेक्ट करें (Disconnect)
                 </button>
               </div>
             </div>
@@ -2200,124 +2948,6 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                 <span>{sheetError}</span>
               </div>
             )}
-
-            {/* 1-CLICK BULK PUSH CARD */}
-            <div className="bg-amber-50 border border-amber-200/90 p-5 rounded-2xl space-y-3 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <UploadCloud className="h-5 w-5 text-amber-700" />
-                <h3 className="text-sm font-extrabold text-amber-950">
-                  1-क्लिक संपूर्ण डेटाबेस गूगल शीट में पुश करें (Push All Database Questions)
-                </h3>
-              </div>
-              <p className="text-xs text-amber-900 leading-relaxed font-medium">
-                यदि आप एडमिन डेटाबेस के सभी शुद्ध/संशोधित प्रश्नों को 1-क्लिक में अपनी Google Sheet में पुश या ओवरराइट करना चाहते हैं, तो नीचे दिए गए बटन दबाएं:
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <button
-                  disabled={isSyncingAllPyq}
-                  onClick={() => handleBulkSyncAll('pyq')}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold p-3 rounded-xl text-xs transition cursor-pointer shadow-xs flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <UploadCloud className="h-4 w-4" />
-                  {isSyncingAllPyq ? "PYQ सिंक हो रहा है..." : "📤 PYQ के सभी प्रश्न Google Sheet में पुश करें"}
-                </button>
-                <button
-                  disabled={isSyncingAllSubject}
-                  onClick={() => handleBulkSyncAll('subject')}
-                  className="bg-blue-700 hover:bg-blue-800 text-white font-extrabold p-3 rounded-xl text-xs transition cursor-pointer shadow-xs flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <UploadCloud className="h-4 w-4" />
-                  {isSyncingAllSubject ? "Subject सिंक हो रहा है..." : "📤 Subject के सभी प्रश्न Google Sheet में पुश करें"}
-                </button>
-              </div>
-            </div>
-
-            {/* REAL-TIME AUTO-SYNC WEBHOOK URLS SECTION */}
-            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-5 rounded-2xl space-y-4 shadow-lg border border-slate-700">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="bg-emerald-500/20 text-emerald-400 p-2 rounded-xl border border-emerald-500/30">
-                    <Code2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-white flex items-center gap-2">
-                      गूगल शीट ऑटो-अपडेट वेबहुक URLs (Real-time Google Apps Script Webhooks)
-                    </h3>
-                    <p className="text-[11px] text-slate-300 mt-0.5">
-                      जब आप एडमिन से किसी प्रश्न को एडिट/अपडेट करेंगे, तो ये वेबहुक आपकी गूगल शीट की उस पंक्ति (Row) को भी ऑटो-अपडेट कर देंगे।
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsAppsScriptModalOpen(true)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-sm"
-                >
-                  <Code2 className="h-4 w-4" /> Apps Script कोड देखें
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* PYQ Webhook */}
-                <div className="space-y-1.5 bg-slate-800/80 p-3.5 rounded-xl border border-slate-700">
-                  <label className="text-xs font-extrabold text-emerald-400 flex items-center gap-1.5">
-                    <GraduationCap className="h-4 w-4 text-emerald-400" />
-                    1. PYQ Google Sheet Webhook URL:
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="PYQ गूगल शीट से प्राप्त Web App URL (https://script.google.com/macros/s/.../exec)"
-                    value={inputAppsScriptUrlPyq}
-                    onChange={(e) => setInputAppsScriptUrlPyq(e.target.value)}
-                    className="w-full p-2.5 bg-slate-900 border border-slate-700 text-emerald-300 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                  <span className="text-[10px] text-slate-400 block font-mono truncate">
-                    सहेजा गया URL: {googleAppsScriptUrlPyq || 'सेट नहीं है'}
-                  </span>
-                </div>
-
-                {/* Subject Webhook */}
-                <div className="space-y-1.5 bg-slate-800/80 p-3.5 rounded-xl border border-slate-700">
-                  <label className="text-xs font-extrabold text-blue-400 flex items-center gap-1.5">
-                    <FileSpreadsheet className="h-4 w-4 text-blue-400" />
-                    2. Subject-wise Google Sheet Webhook URL:
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="विषय-वार गूगल शीट से प्राप्त Web App URL (https://script.google.com/macros/s/.../exec)"
-                    value={inputAppsScriptUrlSubject}
-                    onChange={(e) => setInputAppsScriptUrlSubject(e.target.value)}
-                    className="w-full p-2.5 bg-slate-900 border border-slate-700 text-blue-300 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-[10px] text-slate-400 block font-mono truncate">
-                    सहेजा गया URL: {googleAppsScriptUrlSubject || 'सेट नहीं है'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1 border-t border-slate-700/60">
-                <div className="text-[11px] text-slate-400 font-medium">
-                  💡 यदि दोनों के लिए केवल 1 ही गूगल शीट (एक फाइल) का उपयोग कर रहे हैं, तो दोनों में समान URL चिपकाएं।
-                </div>
-
-                <button
-                  type="button"
-                  disabled={appsScriptSaving}
-                  onClick={handleSaveAppsScriptUrl}
-                  className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2 shrink-0"
-                >
-                  <Save className="h-4 w-4 text-slate-950" />
-                  {appsScriptSaving ? "सहेजा जा रहा है..." : "वेबहुक URLs सहेजें"}
-                </button>
-              </div>
-
-              {appsScriptSuccess && (
-                <div className="p-2.5 bg-emerald-900/60 border border-emerald-500/50 text-emerald-200 rounded-xl text-xs font-bold text-center">
-                  {appsScriptSuccess}
-                </div>
-              )}
-            </div>
 
             {/* Three Dedicated Google Sheet Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -2347,8 +2977,18 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                     onChange={(e) => setInputPyq(e.target.value)}
                     className="w-full p-2.5 text-xs bg-white border border-emerald-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono shadow-2xs"
                   />
-                  <span className="text-[10px] text-gray-500 block">
-                    सहेजी गई ID: <code className="font-mono bg-white px-1 py-0.5 rounded border border-gray-200">{spreadsheetIdPyq || 'खाली'}</code>
+                  <span className="text-[10px] text-gray-500 flex items-center justify-between">
+                    <span>सहेजी गई ID: <code className="font-mono bg-white px-1 py-0.5 rounded border border-gray-200">{spreadsheetIdPyq || 'खाली'}</code></span>
+                    {(extractSheetId(inputPyq) || spreadsheetIdPyq) && (
+                      <button
+                        type="button"
+                        onClick={() => handleDisconnectSingleSheet('pyq')}
+                        className="text-[10px] font-bold text-red-600 hover:text-red-800 hover:underline flex items-center gap-0.5 cursor-pointer"
+                        title="इस गूगल शीट को डिस्कनेक्ट करें"
+                      >
+                        <Unlink className="h-3 w-3" /> डिस्कनेक्ट
+                      </button>
+                    )}
                   </span>
                 </div>
 
@@ -2417,8 +3057,18 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                     onChange={(e) => setInputSubject(e.target.value)}
                     className="w-full p-2.5 text-xs bg-white border border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono shadow-2xs"
                   />
-                  <span className="text-[10px] text-gray-500 block">
-                    सहेजी गई ID: <code className="font-mono bg-white px-1 py-0.5 rounded border border-gray-200">{spreadsheetIdSubject || 'खाली'}</code>
+                  <span className="text-[10px] text-gray-500 flex items-center justify-between">
+                    <span>सहेजी गई ID: <code className="font-mono bg-white px-1 py-0.5 rounded border border-gray-200">{spreadsheetIdSubject || 'खाली'}</code></span>
+                    {(extractSheetId(inputSubject) || spreadsheetIdSubject) && (
+                      <button
+                        type="button"
+                        onClick={() => handleDisconnectSingleSheet('subject')}
+                        className="text-[10px] font-bold text-red-600 hover:text-red-800 hover:underline flex items-center gap-0.5 cursor-pointer"
+                        title="इस गूगल शीट को डिस्कनेक्ट करें"
+                      >
+                        <Unlink className="h-3 w-3" /> डिस्कनेक्ट
+                      </button>
+                    )}
                   </span>
                 </div>
 
@@ -2484,8 +3134,18 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                     onChange={(e) => setInputCA(e.target.value)}
                     className="w-full p-2.5 text-xs bg-white border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono shadow-2xs"
                   />
-                  <span className="text-[10px] text-gray-500 block">
-                    सहेजी गई ID: <code className="font-mono bg-white px-1 py-0.5 rounded border border-gray-200">{spreadsheetIdCA || 'खाली'}</code>
+                  <span className="text-[10px] text-gray-500 flex items-center justify-between">
+                    <span>सहेजी गई ID: <code className="font-mono bg-white px-1 py-0.5 rounded border border-gray-200">{spreadsheetIdCA || 'खाली'}</code></span>
+                    {(extractSheetId(inputCA) || spreadsheetIdCA) && (
+                      <button
+                        type="button"
+                        onClick={() => handleDisconnectSingleSheet('currentAffairs')}
+                        className="text-[10px] font-bold text-red-600 hover:text-red-800 hover:underline flex items-center gap-0.5 cursor-pointer"
+                        title="इस गूगल शीट को डिस्कनेक्ट करें"
+                      >
+                        <Unlink className="h-3 w-3" /> डिस्कनेक्ट
+                      </button>
+                    )}
                   </span>
                 </div>
 
@@ -2709,13 +3369,24 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleDownloadExcelTemplate}
-                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-2 shrink-0 cursor-pointer"
-              >
-                <Download className="h-4 w-4" /> नमूना (Template) एक्सेल डाउनलोड करें
-              </button>
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleDownloadExcelTemplate}
+                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-2 cursor-pointer"
+                >
+                  <Download className="h-4 w-4" /> नमूना (Template) एक्सेल डाउनलोड करें
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAllQuestions}
+                  disabled={questions.length === 0}
+                  className="bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-2 cursor-pointer shadow-xs"
+                  title="डेटाबेस के सभी पुराने प्रश्न हटाएं"
+                >
+                  <Trash2 className="h-4 w-4" /> सभी प्रश्न डिलीट करें ({questions.length})
+                </button>
+              </div>
             </div>
 
             {/* Banners */}
@@ -2825,15 +3496,183 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
           </div>
         )}
 
+        {/* MANUAL QUESTION ADD TAB */}
+        {activeSubTab === 'manual' && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-6">
+            <div className="border-b border-gray-100 pb-3">
+              <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                <PlusCircle className="h-5 w-5 text-emerald-600" /> नया प्रश्न manualmente जोड़ें (Add Manual Question)
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                निचले फॉर्म के माध्यम से एक-एक करके नए प्रश्न एवं उनकी व्याख्या जोड़ें।
+              </p>
+            </div>
 
+            {manualSuccess && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0" />
+                प्रश्न सफलतापूर्वक डेटाबेस में जोड़ दिया गया!
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitManual} className="space-y-5 bg-gray-50/60 p-6 rounded-2xl border border-gray-200">
+              {/* Subject, Topic, Exam, Year Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">विषय (Subject)*</label>
+                  <select
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  >
+                    {subjectsPreset.map((sub, idx) => (
+                      <option key={idx} value={sub}>{sub}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">टॉपिक / अध्याय (Topic)*</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="उदा. भौतिक भूगोल, पंचायती राज"
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">परीक्षा का नाम (Exam Name)</label>
+                  <input
+                    type="text"
+                    placeholder="उदा. CGPSC Prelims"
+                    value={exam}
+                    onChange={(e) => setExam(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">वर्ष (Year)</label>
+                  <input
+                    type="number"
+                    value={year}
+                    onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Question Text */}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">प्रश्न सामग्री (Hindi)*</label>
+                  <textarea
+                    rows={3}
+                    required
+                    placeholder="यहाँ प्रश्न का पूरा पाठ हिन्दी में दर्ज करें..."
+                    value={textHi}
+                    onChange={(e) => setTextHi(e.target.value)}
+                    className="w-full p-3 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium leading-relaxed"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-500 block">Question Text (English - optional)</label>
+                  <input
+                    type="text"
+                    placeholder="Optional English translation..."
+                    value={textEn}
+                    onChange={(e) => setTextEn(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="space-y-2 pt-2 border-t border-gray-200">
+                <label className="text-xs font-black text-gray-800 block">विकल्प (Options) एवं सही उत्तर चुनें*</label>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {['A', 'B', 'C', 'D'].map((label, optIdx) => (
+                    <div key={optIdx} className="bg-white p-3 rounded-xl border border-gray-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold text-emerald-800">विकल्प {label}</span>
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-700">
+                          <input
+                            type="radio"
+                            name="correctOpt"
+                            checked={correctAnswer === optIdx}
+                            onChange={() => setCorrectAnswer(optIdx)}
+                            className="text-emerald-600 focus:ring-emerald-500"
+                          />
+                          सही उत्तर (Correct)
+                        </label>
+                      </div>
+
+                      <input
+                        type="text"
+                        required
+                        placeholder={`विकल्प ${label} (Hindi)`}
+                        value={optionsHi[optIdx] || ''}
+                        onChange={(e) => {
+                          const newOpts = [...optionsHi];
+                          newOpts[optIdx] = e.target.value;
+                          setOptionsHi(newOpts);
+                        }}
+                        className="w-full p-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Explanation */}
+              <div className="space-y-1 pt-2 border-t border-gray-200">
+                <label className="text-[11px] font-bold text-gray-700 block">व्याख्या / स्पष्टीकरण (Hindi Explanation)</label>
+                <textarea
+                  rows={3}
+                  placeholder="प्रश्न का सही उत्तर क्यों है, इसकी विस्तृत व्याख्या यहाँ लिखें..."
+                  value={explanationHi}
+                  onChange={(e) => setExplanationHi(e.target.value)}
+                  className="w-full p-3 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium leading-relaxed"
+                />
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={submittingManual}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-3 rounded-xl text-xs transition flex items-center gap-2 shadow-sm cursor-pointer"
+              >
+                <Save className="h-4 w-4" />
+                {submittingManual ? "सहेजा जा रहा है..." : "प्रश्न सहेजें (Save Question)"}
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* QUESTIONS LIST TAB */}
         {activeSubTab === 'list' && (
           <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-3 border-b border-gray-100">
-              <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
-                <Search className="h-5 w-5 text-emerald-600" /> प्रश्न सूची प्रबंधक
-              </h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                  <Search className="h-5 w-5 text-emerald-600" /> प्रश्न सूची प्रबंधक ({questions.length})
+                </h2>
+                {questions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllQuestions}
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    title="डेटाबेस के सभी प्रश्न एक बार में हटाएं"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> सभी प्रश्न डिलीट करें
+                  </button>
+                )}
+              </div>
               <div className="relative w-full sm:w-72">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <input
@@ -3122,14 +3961,6 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
 
                   <button
                     type="button"
-                    onClick={handleInsertImage}
-                    className="p-1.5 bg-gray-100 hover:bg-emerald-50 text-gray-700 hover:text-emerald-800 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-gray-200"
-                  >
-                    <ImageIcon className="h-3.5 w-3.5" /> + छवि (Image)
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={handleInsertPdfBtn}
                     className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-red-200"
                   >
@@ -3372,256 +4203,55 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                   <label className="font-bold text-gray-900">कॉपी करने हेतु Apps Script कोड:</label>
                   <button
                     onClick={() => {
-                      const code = `function doGet(e) {
-  return ContentService.createTextOutput("TestArena Webhook Active!").setMimeType(ContentService.MimeType.TEXT);
-}
-
-function doPost(e) {
+                      const code = `function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-
-    // 1. ACTION: SYNC_ALL_QUESTIONS (Bulk Push All Questions)
-    if (data.action === 'SYNC_ALL_QUESTIONS') {
-      var questions = data.questions || [];
-      var isPyq = data.sheetType === 'pyq';
-      var preferredName = isPyq ? 'PYQ' : 'Subject';
-      var targetSheet = ss.getSheetByName(preferredName) || ss.getSheets()[0];
+    if (data.action === 'UPDATE_QUESTION') {
+      var q = data.question;
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheetName = (data.sheetType === 'pyq' || q.exam) ? 'PYQ' : 'Subject';
+      var sheet = ss.getSheetByName(sheetName) || ss.getSheets()[0];
+      var rows = sheet.getDataRange().getValues();
       
-      var headers = targetSheet.getRange(1, 1, 1, Math.max(10, targetSheet.getLastColumn())).getValues()[0];
-      var col1Header = String(headers[0] || '').toLowerCase();
-      var isCol1Id = col1Header.indexOf('id') !== -1 || col1Header.indexOf('s.no') !== -1 || col1Header.indexOf('sr') !== -1;
-
-      var newRows = [];
-      for (var i = 0; i < questions.length; i++) {
-        var q = questions[i];
+      var targetRow = -1;
+      for (var i = 1; i < rows.length; i++) {
+        var rowId = String(rows[i][0] || '').trim();
+        var rowText = String(rows[i][1] || '').trim();
+        if ((q.id && rowId === String(q.id).trim()) || (q.text_hi && rowText.substring(0, 30) === String(q.text_hi).substring(0, 30))) {
+          targetRow = i + 1;
+          break;
+        }
+      }
+      
+      if (targetRow > 0) {
         var optA = (q.options_hi && q.options_hi[0]) || '';
         var optB = (q.options_hi && q.options_hi[1]) || '';
         var optC = (q.options_hi && q.options_hi[2]) || '';
         var optD = (q.options_hi && q.options_hi[3]) || '';
         var correctVal = (q.correctAnswer !== undefined) ? (q.correctAnswer + 1) : 1;
-
-        if (isCol1Id) {
-          newRows.push([
-            q.id || (i + 1),
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]);
-        } else {
-          newRows.push([
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]);
-        }
-      }
-
-      var lastRow = targetSheet.getLastRow();
-      if (lastRow > 1) {
-        targetSheet.getRange(2, 1, lastRow - 1, targetSheet.getLastColumn()).clearContent();
-      }
-
-      if (newRows.length > 0) {
-        var numCols = isCol1Id ? 10 : 9;
-        targetSheet.getRange(2, 1, newRows.length, numCols).setValues(newRows);
-      }
-
-      return ContentService.createTextOutput(JSON.stringify({ status: 'success', count: newRows.length, sheet: targetSheet.getName() })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 2. ACTION: UPDATE_QUESTION (Update or Append single question)
-    if (data.action === 'UPDATE_QUESTION') {
-      var q = data.question;
-      var oldQ = data.oldQuestion || q;
-      var isPyq = (data.sheetType === 'pyq' || (q.exam && String(q.exam).trim() !== ''));
-      
-      var sheets = ss.getSheets();
-      var targetSheet = null;
-      var targetRow = -1;
-
-      var preferredName = isPyq ? 'PYQ' : 'Subject';
-      targetSheet = ss.getSheetByName(preferredName);
-
-      if (targetSheet) {
-        targetRow = findQuestionRowInSheet(targetSheet, q, oldQ);
-      }
-
-      if (targetRow === -1) {
-        for (var s = 0; s < sheets.length; s++) {
-          var rowIdx = findQuestionRowInSheet(sheets[s], q, oldQ);
-          if (rowIdx > 0) {
-            targetSheet = sheets[s];
-            targetRow = rowIdx;
-            break;
-          }
-        }
-      }
-
-      if (!targetSheet) {
-        targetSheet = ss.getSheets()[0];
-      }
-
-      var optA = (q.options_hi && q.options_hi[0]) || '';
-      var optB = (q.options_hi && q.options_hi[1]) || '';
-      var optC = (q.options_hi && q.options_hi[2]) || '';
-      var optD = (q.options_hi && q.options_hi[3]) || '';
-      var correctVal = (q.correctAnswer !== undefined) ? (q.correctAnswer + 1) : 1;
-      
-      var headers = targetSheet.getRange(1, 1, 1, Math.max(12, targetSheet.getLastColumn())).getValues()[0];
-      var col1Header = String(headers[0] || '').toLowerCase();
-      var isCol1Id = col1Header.indexOf('id') !== -1 || col1Header.indexOf('s.no') !== -1 || col1Header.indexOf('sr') !== -1;
-
-      if (targetRow > 0) {
-        // UPDATE existing row
-        if (isCol1Id) {
-          targetSheet.getRange(targetRow, 1, 1, 10).setValues([[
-            q.id || '',
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]]);
-        } else {
-          targetSheet.getRange(targetRow, 1, 1, 9).setValues([[
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]]);
-        }
-        return ContentService.createTextOutput(JSON.stringify({ status: 'success', action: 'updated', row: targetRow, sheet: targetSheet.getName() })).setMimeType(ContentService.MimeType.JSON);
-      } else {
-        // APPEND new row if not found
-        if (isCol1Id) {
-          targetSheet.appendRow([
-            q.id || '',
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]);
-        } else {
-          targetSheet.appendRow([
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]);
-        }
-        return ContentService.createTextOutput(JSON.stringify({ status: 'success', action: 'appended', sheet: targetSheet.getName() })).setMimeType(ContentService.MimeType.JSON);
+        
+        sheet.getRange(targetRow, 1, 1, 10).setValues([[
+          q.id || '',
+          q.text_hi || '',
+          optA,
+          optB,
+          optC,
+          optD,
+          correctVal,
+          q.explanation_hi || '',
+          q.exam || q.subject || '',
+          q.topic || ''
+        ]]);
+        return ContentService.createTextOutput(JSON.stringify({ status: 'success', row: targetRow })).setMimeType(ContentService.MimeType.JSON);
       }
     }
-    return ContentService.createTextOutput(JSON.stringify({ status: 'unknown_action' })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ status: 'not_found' })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'error', error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
-}
-
-function findQuestionRowInSheet(sheet, q, oldQ) {
-  var rows = sheet.getDataRange().getValues();
-  if (rows.length <= 1) return -1;
-
-  // Direct Row check if sheetRowNumber is present
-  if (q && q.sheetRowNumber && typeof q.sheetRowNumber === 'number' && q.sheetRowNumber >= 2 && q.sheetRowNumber <= rows.length) {
-    return q.sheetRowNumber;
-  }
-
-  var targetId = q.id ? String(q.id).trim().toLowerCase() : '';
-  var textCandidates = [];
-  if (oldQ && oldQ.text_hi) textCandidates.push(String(oldQ.text_hi).trim());
-  if (q && q.text_hi) textCandidates.push(String(q.text_hi).trim());
-
-  function normalize(str) {
-    if (!str) return '';
-    return String(str).replace(/[^a-zA-Z0-9\\u0900-\\u097F]/g, '').toLowerCase();
-  }
-
-  var snippetCandidates = textCandidates.map(function(t) {
-    var c = normalize(t);
-    return c.length > 20 ? c.substring(0, 20) : c;
-  }).filter(function(s) { return s.length >= 5; });
-
-  // Pass 1: ID Match anywhere in row
-  if (targetId) {
-    for (var i = 1; i < rows.length; i++) {
-      for (var j = 0; j < Math.min(rows[i].length, 5); j++) {
-        var cellVal = String(rows[i][j] || '').trim().toLowerCase();
-        if (cellVal === targetId) {
-          return i + 1;
-        }
-      }
-    }
-  }
-
-  // Pass 2: Clean snippet match in any cell of row
-  for (var i = 1; i < rows.length; i++) {
-    var row = rows[i];
-    for (var j = 0; j < Math.min(row.length, 5); j++) {
-      var cellClean = normalize(row[j]);
-      if (cellClean.length < 5) continue;
-
-      for (var k = 0; k < snippetCandidates.length; k++) {
-        var snip = snippetCandidates[k];
-        if (cellClean.indexOf(snip) !== -1 || snip.indexOf(cellClean) !== -1) {
-          return i + 1;
-        }
-      }
-    }
-  }
-
-  // Pass 3: Exact or partial prefix match in any cell
-  for (var i = 1; i < rows.length; i++) {
-    var row = rows[i];
-    for (var j = 0; j < Math.min(row.length, 5); j++) {
-      var cellText = String(row[j] || '').trim();
-      if (!cellText || cellText.length < 5) continue;
-
-      for (var k = 0; k < textCandidates.length; k++) {
-        var candidate = textCandidates[k];
-        if (cellText === candidate) return i + 1;
-        if (cellText.toLowerCase().indexOf(candidate.toLowerCase().substring(0, 20)) !== -1) return i + 1;
-        if (candidate.toLowerCase().indexOf(cellText.toLowerCase().substring(0, 20)) !== -1) return i + 1;
-      }
-    }
-  }
-
-  return -1;
 }`;
                       navigator.clipboard.writeText(code);
-                      alert('अद्यतनित Apps Script कोड क्लिपबोर्ड पर कॉपी हो गया!');
+                      alert('Apps Script कोड क्लिपबोर्ड पर कॉपी हो गया!');
                     }}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-1 rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer"
                   >
@@ -3630,348 +4260,95 @@ function findQuestionRowInSheet(sheet, q, oldQ) {
                 </div>
                 <textarea
                   readOnly
-                  rows={10}
+                  rows={8}
                   className="w-full p-3 bg-slate-900 text-emerald-400 font-mono text-[11px] rounded-2xl border border-slate-800 leading-relaxed"
-                  value={`function doGet(e) {
-  return ContentService.createTextOutput("TestArena Webhook Active!").setMimeType(ContentService.MimeType.TEXT);
-}
-
-function doPost(e) {
+                  value={`function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-
-    // 1. ACTION: SYNC_ALL_QUESTIONS (Bulk Push All Questions)
-    if (data.action === 'SYNC_ALL_QUESTIONS') {
-      var questions = data.questions || [];
-      var isPyq = data.sheetType === 'pyq';
-      var preferredName = isPyq ? 'PYQ' : 'Subject';
-      var targetSheet = ss.getSheetByName(preferredName) || ss.getSheets()[0];
+    if (data.action === 'UPDATE_QUESTION') {
+      var q = data.question;
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheetName = (data.sheetType === 'pyq' || q.exam) ? 'PYQ' : 'Subject';
+      var sheet = ss.getSheetByName(sheetName) || ss.getSheets()[0];
+      var rows = sheet.getDataRange().getValues();
       
-      var headers = targetSheet.getRange(1, 1, 1, Math.max(10, targetSheet.getLastColumn())).getValues()[0];
-      var col1Header = String(headers[0] || '').toLowerCase();
-      var isCol1Id = col1Header.indexOf('id') !== -1 || col1Header.indexOf('s.no') !== -1 || col1Header.indexOf('sr') !== -1;
-
-      var newRows = [];
-      for (var i = 0; i < questions.length; i++) {
-        var q = questions[i];
+      var targetRow = -1;
+      for (var i = 1; i < rows.length; i++) {
+        var rowId = String(rows[i][0] || '').trim();
+        var rowText = String(rows[i][1] || '').trim();
+        if ((q.id && rowId === String(q.id).trim()) || (q.text_hi && rowText.substring(0, 30) === String(q.text_hi).substring(0, 30))) {
+          targetRow = i + 1;
+          break;
+        }
+      }
+      
+      if (targetRow > 0) {
         var optA = (q.options_hi && q.options_hi[0]) || '';
         var optB = (q.options_hi && q.options_hi[1]) || '';
         var optC = (q.options_hi && q.options_hi[2]) || '';
         var optD = (q.options_hi && q.options_hi[3]) || '';
         var correctVal = (q.correctAnswer !== undefined) ? (q.correctAnswer + 1) : 1;
-
-        if (isCol1Id) {
-          newRows.push([
-            q.id || (i + 1),
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]);
-        } else {
-          newRows.push([
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]);
-        }
-      }
-
-      var lastRow = targetSheet.getLastRow();
-      if (lastRow > 1) {
-        targetSheet.getRange(2, 1, lastRow - 1, targetSheet.getLastColumn()).clearContent();
-      }
-
-      if (newRows.length > 0) {
-        var numCols = isCol1Id ? 10 : 9;
-        targetSheet.getRange(2, 1, newRows.length, numCols).setValues(newRows);
-      }
-
-      return ContentService.createTextOutput(JSON.stringify({ status: 'success', count: newRows.length, sheet: targetSheet.getName() })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 2. ACTION: UPDATE_QUESTION (Update or Append single question)
-    if (data.action === 'UPDATE_QUESTION') {
-      var q = data.question;
-      var oldQ = data.oldQuestion || q;
-      var isPyq = (data.sheetType === 'pyq' || (q.exam && String(q.exam).trim() !== ''));
-      
-      var sheets = ss.getSheets();
-      var targetSheet = null;
-      var targetRow = -1;
-
-      var preferredName = isPyq ? 'PYQ' : 'Subject';
-      targetSheet = ss.getSheetByName(preferredName);
-
-      if (targetSheet) {
-        targetRow = findQuestionRowInSheet(targetSheet, q, oldQ);
-      }
-
-      if (targetRow === -1) {
-        for (var s = 0; s < sheets.length; s++) {
-          var rowIdx = findQuestionRowInSheet(sheets[s], q, oldQ);
-          if (rowIdx > 0) {
-            targetSheet = sheets[s];
-            targetRow = rowIdx;
-            break;
-          }
-        }
-      }
-
-      if (!targetSheet) {
-        targetSheet = ss.getSheets()[0];
-      }
-
-      var optA = (q.options_hi && q.options_hi[0]) || '';
-      var optB = (q.options_hi && q.options_hi[1]) || '';
-      var optC = (q.options_hi && q.options_hi[2]) || '';
-      var optD = (q.options_hi && q.options_hi[3]) || '';
-      var correctVal = (q.correctAnswer !== undefined) ? (q.correctAnswer + 1) : 1;
-      
-      var headers = targetSheet.getRange(1, 1, 1, Math.max(12, targetSheet.getLastColumn())).getValues()[0];
-      var col1Header = String(headers[0] || '').toLowerCase();
-      var isCol1Id = col1Header.indexOf('id') !== -1 || col1Header.indexOf('s.no') !== -1 || col1Header.indexOf('sr') !== -1;
-
-      if (targetRow > 0) {
-        // UPDATE existing row
-        if (isCol1Id) {
-          targetSheet.getRange(targetRow, 1, 1, 10).setValues([[
-            q.id || '',
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]]);
-        } else {
-          targetSheet.getRange(targetRow, 1, 1, 9).setValues([[
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]]);
-        }
-        return ContentService.createTextOutput(JSON.stringify({ status: 'success', action: 'updated', row: targetRow, sheet: targetSheet.getName() })).setMimeType(ContentService.MimeType.JSON);
-      } else {
-        // APPEND new row if not found
-        if (isCol1Id) {
-          targetSheet.appendRow([
-            q.id || '',
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]);
-        } else {
-          targetSheet.appendRow([
-            q.text_hi || '',
-            optA,
-            optB,
-            optC,
-            optD,
-            correctVal,
-            q.explanation_hi || '',
-            q.exam || q.subject || '',
-            q.topic || ''
-          ]);
-        }
-        return ContentService.createTextOutput(JSON.stringify({ status: 'success', action: 'appended', sheet: targetSheet.getName() })).setMimeType(ContentService.MimeType.JSON);
+        
+        sheet.getRange(targetRow, 1, 1, 10).setValues([[
+          q.id || '',
+          q.text_hi || '',
+          optA,
+          optB,
+          optC,
+          optD,
+          correctVal,
+          q.explanation_hi || '',
+          q.exam || q.subject || '',
+          q.topic || ''
+        ]]);
+        return ContentService.createTextOutput(JSON.stringify({ status: 'success', row: targetRow })).setMimeType(ContentService.MimeType.JSON);
       }
     }
-    return ContentService.createTextOutput(JSON.stringify({ status: 'unknown_action' })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ status: 'not_found' })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'error', error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
-}
-
-function findQuestionRowInSheet(sheet, q, oldQ) {
-  var rows = sheet.getDataRange().getValues();
-  if (rows.length <= 1) return -1;
-
-  // Direct Row check if sheetRowNumber is present
-  if (q && q.sheetRowNumber && typeof q.sheetRowNumber === 'number' && q.sheetRowNumber >= 2 && q.sheetRowNumber <= rows.length) {
-    return q.sheetRowNumber;
-  }
-
-  var targetId = q.id ? String(q.id).trim().toLowerCase() : '';
-  var textCandidates = [];
-  if (oldQ && oldQ.text_hi) textCandidates.push(String(oldQ.text_hi).trim());
-  if (q && q.text_hi) textCandidates.push(String(q.text_hi).trim());
-
-  function normalize(str) {
-    if (!str) return '';
-    return String(str).replace(/[^a-zA-Z0-9\\u0900-\\u097F]/g, '').toLowerCase();
-  }
-
-  var snippetCandidates = textCandidates.map(function(t) {
-    var c = normalize(t);
-    return c.length > 20 ? c.substring(0, 20) : c;
-  }).filter(function(s) { return s.length >= 5; });
-
-  // Pass 1: ID Match anywhere in row
-  if (targetId) {
-    for (var i = 1; i < rows.length; i++) {
-      for (var j = 0; j < Math.min(rows[i].length, 5); j++) {
-        var cellVal = String(rows[i][j] || '').trim().toLowerCase();
-        if (cellVal === targetId) {
-          return i + 1;
-        }
-      }
-    }
-  }
-
-  // Pass 2: Clean snippet match in any cell of row
-  for (var i = 1; i < rows.length; i++) {
-    var row = rows[i];
-    for (var j = 0; j < Math.min(row.length, 5); j++) {
-      var cellClean = normalize(row[j]);
-      if (cellClean.length < 5) continue;
-
-      for (var k = 0; k < snippetCandidates.length; k++) {
-        var snip = snippetCandidates[k];
-        if (cellClean.indexOf(snip) !== -1 || snip.indexOf(cellClean) !== -1) {
-          return i + 1;
-        }
-      }
-    }
-  }
-
-  // Pass 3: Exact or partial prefix match in any cell
-  for (var i = 1; i < rows.length; i++) {
-    var row = rows[i];
-    for (var j = 0; j < Math.min(row.length, 5); j++) {
-      var cellText = String(row[j] || '').trim();
-      if (!cellText || cellText.length < 5) continue;
-
-      for (var k = 0; k < textCandidates.length; k++) {
-        var candidate = textCandidates[k];
-        if (cellText === candidate) return i + 1;
-        if (cellText.toLowerCase().indexOf(candidate.toLowerCase().substring(0, 20)) !== -1) return i + 1;
-        if (candidate.toLowerCase().indexOf(cellText.toLowerCase().substring(0, 20)) !== -1) return i + 1;
-      }
-    }
-  }
-
-  return -1;
 }`}
                 />
               </div>
 
               {/* WebApp URL Save input */}
-              <div className="space-y-4 pt-3 border-t border-gray-200">
-                <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-2xl text-[11px] text-amber-900 font-bold">
-                  💡 यदि आप PYQ और Subject-wise के लिए दो अलग-अलग गूगल शीट (2 Files) का उपयोग कर रहे हैं, तो दोनों शीट में अलग-अलग Apps Script डिप्लॉय करें और उनके Web App URLs नीचे अलग-अलग दर्ज करें:
-                </div>
-
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="font-extrabold text-emerald-900 block text-xs">1. PYQ Google Sheet - Web App URL:</label>
-                    <input
-                      type="url"
-                      placeholder="PYQ गूगल शीट से प्राप्त Web App URL (https://script.google.com/macros/s/.../exec)"
-                      value={inputAppsScriptUrlPyq}
-                      onChange={(e) => setInputAppsScriptUrlPyq(e.target.value)}
-                      className="w-full p-2.5 bg-gray-50 border border-emerald-200 rounded-xl font-medium text-xs focus:ring-2 focus:ring-emerald-500 font-mono"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-extrabold text-blue-900 block text-xs">2. Subject-wise Google Sheet - Web App URL:</label>
-                    <input
-                      type="url"
-                      placeholder="विषय-वार गूगल शीट से प्राप्त Web App URL (https://script.google.com/macros/s/.../exec)"
-                      value={inputAppsScriptUrlSubject}
-                      onChange={(e) => setInputAppsScriptUrlSubject(e.target.value)}
-                      className="w-full p-2.5 bg-gray-50 border border-blue-200 rounded-xl font-medium text-xs focus:ring-2 focus:ring-blue-500 font-mono"
-                    />
-                  </div>
-
-                  <details className="text-[11px] text-gray-500 cursor-pointer">
-                    <summary className="font-bold hover:text-gray-700">समान/कम्बाइंड URL का उपयोग (वैकल्पिक)</summary>
-                    <div className="pt-2 space-y-1">
-                      <label className="font-bold text-gray-800 block">समान / सामान्य (Default) Web App URL:</label>
-                      <input
-                        type="url"
-                        placeholder="https://script.google.com/macros/s/.../exec"
-                        value={inputAppsScriptUrl}
-                        onChange={(e) => setInputAppsScriptUrl(e.target.value)}
-                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-xs font-mono"
-                      />
-                    </div>
-                  </details>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="space-y-2 pt-2 border-t border-gray-200">
+                <label className="font-bold text-gray-900 block">Deploy किया हुआ Google Apps Script Web App URL यहाँ दर्ज करें:</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://script.google.com/macros/s/AKfycbx.../exec"
+                    value={inputAppsScriptUrl}
+                    onChange={(e) => setInputAppsScriptUrl(e.target.value)}
+                    className="flex-1 p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-xs focus:ring-2 focus:ring-emerald-500"
+                  />
                   <button
                     disabled={appsScriptSaving}
                     onClick={handleSaveAppsScriptUrl}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-2.5 rounded-xl text-xs transition cursor-pointer shadow-xs flex items-center gap-1.5"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs transition cursor-pointer shadow-xs flex items-center gap-1.5 shrink-0"
                   >
                     <Save className="h-4 w-4" />
-                    {appsScriptSaving ? "सहेजा जा रहा है..." : "वेबहुक URLs सहेजें"}
+                    {appsScriptSaving ? "सहेजा जा रहा है..." : "URL सहेजें"}
                   </button>
+                  {(googleAppsScriptUrl || inputAppsScriptUrl) && (
+                    <button
+                      type="button"
+                      disabled={appsScriptSaving}
+                      onClick={handleDisconnectAppsScript}
+                      className="bg-red-50 hover:bg-red-100 text-red-700 font-extrabold px-4 py-2.5 rounded-xl text-xs transition cursor-pointer border border-red-200 flex items-center gap-1.5 shrink-0"
+                      title="गूगल एप्स स्क्रिप्ट URL डिस्कनेक्ट करें"
+                    >
+                      <Unlink className="h-4 w-4 text-red-600" />
+                      डिस्कनेक्ट करें
+                    </button>
+                  )}
                 </div>
-
                 {appsScriptSuccess && (
-                  <p className="text-xs text-emerald-800 font-bold bg-emerald-50 p-2.5 rounded-xl border border-emerald-200 text-center">
+                  <p className="text-xs text-emerald-800 font-bold bg-emerald-50 p-2 rounded-xl border border-emerald-200">
                     {appsScriptSuccess}
                   </p>
                 )}
-
-                {/* 1-Click Bulk Sync Section */}
-                <div className="space-y-3 pt-4 border-t border-gray-200">
-                  <h4 className="font-extrabold text-gray-900 text-xs flex items-center gap-1.5">
-                    <RefreshCw className="h-4 w-4 text-emerald-600" />
-                    1-क्लिक संपूर्ण डेटाबेस गूगल शीट में सिंक (Push All Questions):
-                  </h4>
-                  <p className="text-[11px] text-gray-600 leading-snug">
-                    यदि किसी कारणवश सिंगल प्रश्न ऑटो-अपडेट नहीं हो पा रहा है, तो आप 1-क्लिक में पूरे डेटाबेस को गूगल शीट में सीधे ओवरराइट/अपडेट कर सकते हैं:
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <button
-                      disabled={isSyncingAllPyq}
-                      onClick={() => handleBulkSyncAll('pyq')}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold p-2.5 rounded-xl text-xs transition cursor-pointer shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
-                    >
-                      <UploadCloud className="h-4 w-4" />
-                      {isSyncingAllPyq ? "PYQ सिंक हो रहा है..." : "PYQ के सभी प्रश्न Google Sheet में पुश करें"}
-                    </button>
-                    <button
-                      disabled={isSyncingAllSubject}
-                      onClick={() => handleBulkSyncAll('subject')}
-                      className="bg-blue-700 hover:bg-blue-800 text-white font-extrabold p-2.5 rounded-xl text-xs transition cursor-pointer shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
-                    >
-                      <UploadCloud className="h-4 w-4" />
-                      {isSyncingAllSubject ? "Subject सिंक हो रहा है..." : "Subject के सभी प्रश्न Google Sheet में पुश करें"}
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
