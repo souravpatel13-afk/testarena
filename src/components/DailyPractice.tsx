@@ -511,13 +511,13 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
 
         <div className="relative z-10 space-y-4 max-w-2xl">
           <div className="inline-flex items-center gap-2 bg-amber-400/20 text-amber-300 px-3.5 py-1.5 rounded-full text-xs font-extrabold border border-amber-400/30">
-            <Sparkles className="h-4 w-4 text-amber-300" /> डेली 20-25 वस्तुनिष्ठ अभ्यास
+            <Sparkles className="h-4 w-4 text-amber-300" /> सहायक शिक्षक भर्ती परीक्षा डेली प्रैक्टिस
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
-            डेली प्रैक्टिस ज़ोन (Daily Practice Zone)
+            सहायक शिक्षक भर्ती परीक्षा डेली प्रैक्टिस
           </h1>
           <p className="text-xs sm:text-sm text-emerald-100 font-medium leading-relaxed">
-            CGPSC प्रारंभिक परीक्षा, व्यापमं, पटवारी, शिक्षक एवं पुलिस भर्ती परीक्षाओं के लिए प्रतिदिन 20 से 25 महत्वपूर्ण प्रश्नों का अभ्यास करें। प्रत्येक प्रश्न की विस्तृत व्याख्या और त्वरित उत्तर जाँच उपलब्ध है।
+            सहायक शिक्षक भर्ती परीक्षा के लिए प्रतिदिन महत्वपूर्ण प्रश्नों का अभ्यास करें। प्रत्येक प्रश्न की विस्तृत व्याख्या और त्वरित उत्तर जाँच उपलब्ध है।
           </p>
 
           <div className="flex flex-wrap gap-4 pt-2 text-xs font-bold text-emerald-200">

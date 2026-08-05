@@ -1741,7 +1741,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
           }`}
         >
           <Sparkles className="h-4 w-4 text-amber-500 animate-bounce" />
-          ⚡ डेली प्रैक्टिस प्रबंधन (Daily 20-25 Questions)
+          ⚡ सहायक शिक्षक भर्ती परीक्षा डेली प्रैक्टिस प्रबंधन
         </button>
 
         <button
@@ -1788,13 +1788,13 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
             <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 text-white p-6 rounded-3xl shadow-md border border-emerald-700/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="space-y-1">
                 <span className="text-[11px] font-extrabold text-amber-300 bg-amber-400/20 px-3 py-1 rounded-full border border-amber-300/30 inline-flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-amber-300" /> डेली 20-25 प्रश्न प्रबंधन प्रणाली
+                  <Sparkles className="h-3.5 w-3.5 text-amber-300" /> सहायक शिक्षक भर्ती परीक्षा डेली प्रैक्टिस
                 </span>
                 <h2 className="text-xl font-extrabold text-white">
                   डेली प्रैक्टिस सेट सम्पादक (Daily Practice Manager)
                 </h2>
                 <p className="text-xs text-emerald-100 font-medium max-w-2xl leading-relaxed">
-                  वेबसाइट कोड को अपडेट किए बिना यहाँ से रोज 20 से 25 नए वस्तुनिष्ठ प्रश्न एचटीएमएल कोड (HTML) या सीधे फॉर्म द्वारा जोड़ें एवं तुरंत लाइव करें।
+                  वेबसाइट कोड को अपडेट किए बिना यहाँ से सहायक शिक्षक भर्ती परीक्षा के नए वस्तुनिष्ठ प्रश्न एचटीएमएल कोड (HTML) या सीधे फॉर्म द्वारा जोड़ें एवं तुरंत लाइव करें।
                 </p>
               </div>
 
@@ -1951,7 +1951,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                           <FileCode className="h-4 w-4" /> बल्क HTML कोड पेस्ट एवं पार्सर
                         </h4>
                         <p className="text-[11px] text-slate-400">
-                          अपने 20-25 प्रश्नों का HTML कोड नीचे बॉक्स में पेस्ट करें और "पार्स करें" पर क्लिक करें।
+                          अपने प्रश्नों का HTML कोड नीचे बॉक्स में पेस्ट करें और "पार्स करें" पर क्लिक करें।
                         </p>
                       </div>
 
