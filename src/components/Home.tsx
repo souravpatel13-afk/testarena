@@ -100,7 +100,7 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
                 onClick={() => onNavigate('daily-practice')}
                 className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-black px-8 py-4 rounded-full text-sm shadow-xl transition-all transform hover:scale-105 flex items-center gap-2 cursor-pointer border-2 border-amber-300"
               >
-                ⚡ सहायक शिक्षक भर्ती परीक्षा डेली प्रैक्टिस
+                ⚡ डेली प्रैक्टिस (शिक्षक एवं सहायक शिक्षक)
               </button>
 
               <button
@@ -161,10 +161,10 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
         <div className="space-y-2 text-center md:text-left">
           <div className="inline-flex items-center gap-2 bg-amber-400/20 text-amber-300 border border-amber-300/30 text-[11px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
             <Sparkles className="h-4 w-4 text-amber-300 animate-bounce" />
-            सहायक शिक्षक भर्ती परीक्षा डेली प्रैक्टिस
+            डेली प्रैक्टिस (शिक्षक एवं सहायक शिक्षक)
           </div>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-            सहायक शिक्षक भर्ती परीक्षा डेली प्रैक्टिस
+            डेली प्रैक्टिस (शिक्षक एवं सहायक शिक्षक)
           </h2>
           <p className="text-xs sm:text-sm text-emerald-100 leading-relaxed max-w-2xl font-medium">
             प्रतियोगी परीक्षाओं की तैयारी के लिए रोज नए वस्तुनिष्ठ प्रश्न, टाइमर एवं विस्तृत व्याख्या के साथ अभ्यास करें और अपनी तैयारी का आकलन करें।

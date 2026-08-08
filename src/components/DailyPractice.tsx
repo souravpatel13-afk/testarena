@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, 
   CheckCircle, 
@@ -14,18 +14,45 @@ import {
   BookOpen,
   Share2,
   FileText,
-  HelpCircle
+  HelpCircle,
+  GraduationCap,
+  UserCheck,
+  Sprout,
+  BookMarked,
+  Languages,
+  Calculator,
+  Atom,
+  Briefcase,
+  ChevronRight,
+  Filter,
+  Layers
 } from 'lucide-react';
-import { DailyPracticeSet, DailyPracticeQuestion } from '../types';
+import { DailyPracticeSet, DailyPracticeQuestion, DailyPracticeCategory } from '../types';
 
 interface DailyPracticeProps {
   onBackToHome?: () => void;
 }
 
+const getCategoryIcon = (iconName?: string) => {
+  switch (iconName) {
+    case 'UserCheck': return UserCheck;
+    case 'Sprout': return Sprout;
+    case 'BookMarked': return BookMarked;
+    case 'Languages': return Languages;
+    case 'Calculator': return Calculator;
+    case 'Atom': return Atom;
+    case 'Briefcase': return Briefcase;
+    case 'GraduationCap': return GraduationCap;
+    default: return BookOpen;
+  }
+};
+
 export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
   const [sets, setSets] = useState<DailyPracticeSet[]>([]);
+  const [categories, setCategories] = useState<DailyPracticeCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Active Practice State
   const [activeSet, setActiveSet] = useState<DailyPracticeSet | null>(null);
@@ -53,8 +80,23 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('/api/daily-practice-categories');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setCategories(data);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch daily practice categories:", err);
+    }
+  };
+
   useEffect(() => {
     fetchDailyPracticeSets();
+    fetchCategories();
   }, []);
 
   const [copiedShare, setCopiedShare] = useState(false);
@@ -500,7 +542,47 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
     );
   }
 
-  // List of Available Daily Practice Sets
+  // Combine explicit categories with auto-detected categories from sets (ensuring 'सहायक शिक्षक' and existing sets always have a card)
+  const effectiveCategories = useMemo(() => {
+    const list = [...categories];
+    sets.forEach(set => {
+      const catName = (set.category || set.subject || 'सहायक शिक्षक').trim();
+      if (catName && !list.some(c => c.name.trim().toLowerCase() === catName.toLowerCase())) {
+        list.push({
+          id: 'auto-' + catName,
+          name: catName,
+          subLabel: 'Teacher Sector',
+          description: `${catName} परीक्षा हेतु विशेष प्रश्नोत्तरी एवं अभ्यास सेट`,
+          iconName: 'GraduationCap',
+          badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300'
+        });
+      }
+    });
+    if (list.length === 0) {
+      list.push({
+        id: 'cat-default-1',
+        name: 'सहायक शिक्षक',
+        subLabel: 'Teacher Sector',
+        description: 'सहायक शिक्षक परीक्षा हेतु विशेष वस्तुनिष्ठ प्रश्नोत्तरी एवं अभ्यास सेट',
+        iconName: 'GraduationCap',
+        badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300'
+      });
+    }
+    return list;
+  }, [categories, sets]);
+
+  // Filter Sets by Selected Category
+  const filteredSets = sets.filter(set => {
+    if (!selectedCategory || selectedCategory === 'all') return true;
+    const targetCat = selectedCategory.trim().toLowerCase();
+    const setCat = (set.category || set.subject || 'सहायक शिक्षक').trim().toLowerCase();
+    return setCat === targetCat;
+  });
+
+  // Current selected category details
+  const activeCategoryObj = effectiveCategories.find(c => c.name === selectedCategory || c.id === selectedCategory);
+
+  // List of Available Daily Practice Sets or Category Cards
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       {/* Hero Banner */}
@@ -511,86 +593,272 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
 
         <div className="relative z-10 space-y-4 max-w-2xl">
           <div className="inline-flex items-center gap-2 bg-amber-400/20 text-amber-300 px-3.5 py-1.5 rounded-full text-xs font-extrabold border border-amber-400/30">
-            <Sparkles className="h-4 w-4 text-amber-300" /> सहायक शिक्षक भर्ती परीक्षा डेली प्रैक्टिस
+            <Sparkles className="h-4 w-4 text-amber-300" /> डेली प्रैक्टिस (शिक्षक एवं सहायक शिक्षक)
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
-            सहायक शिक्षक भर्ती परीक्षा डेली प्रैक्टिस
+            {selectedCategory && activeCategoryObj 
+              ? `${activeCategoryObj.name} - डेली प्रैक्टिस` 
+              : 'डेली प्रैक्टिस (शिक्षक एवं सहायक शिक्षक)'}
           </h1>
           <p className="text-xs sm:text-sm text-emerald-100 font-medium leading-relaxed">
-            सहायक शिक्षक भर्ती परीक्षा के लिए प्रतिदिन महत्वपूर्ण प्रश्नों का अभ्यास करें। प्रत्येक प्रश्न की विस्तृत व्याख्या और त्वरित उत्तर जाँच उपलब्ध है।
+            सहायक शिक्षक, शिक्षक कृषि, शिक्षक हिंदी, शिक्षक अंग्रेजी, शिक्षक गणित, शिक्षक विज्ञान आदि भर्ती परीक्षाओं के लिए अपने विषय के अनुसार डेली प्रैक्टिस प्रश्न हल करें।
           </p>
 
           <div className="flex flex-wrap gap-4 pt-2 text-xs font-bold text-emerald-200">
             <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10">
-              <Calendar className="h-4 w-4 text-emerald-300" /> रोज नए अपडेट
+              <Calendar className="h-4 w-4 text-emerald-300" /> विषयवार एवं पदवार प्रश्न
             </span>
             <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10">
-              <Zap className="h-4 w-4 text-amber-300" /> तत्काल व्याख्या एवं उत्तर
+              <Zap className="h-4 w-4 text-amber-300" /> तत्काल उत्तर व व्याख्या
             </span>
             <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10">
-              <FileText className="h-4 w-4 text-emerald-300" /> HTML समृद्ध प्रश्न
+              <FileText className="h-4 w-4 text-emerald-300" /> 100% निःशुल्क टेस्ट
             </span>
           </div>
         </div>
       </div>
 
-      {/* Available Daily Practice Sets Grid */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-          <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-emerald-600" /> दैनिक अभ्यास सेट सूची (Daily Practice Sets)
-          </h2>
-          <span className="text-xs font-extrabold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-            कुल सेट उपलब्ध: {sets.length}
-          </span>
-        </div>
-
-        {sets.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-10 text-center space-y-3">
-            <BookOpen className="h-12 w-12 text-gray-300 mx-auto" />
-            <p className="text-sm font-bold text-gray-600">अभी कोई डेली प्रैक्टिस सेट उपलब्ध नहीं है।</p>
-            <p className="text-xs text-gray-400">एडमिन क्षेत्र से जल्द ही नए प्रश्न जोड़े जाएंगे।</p>
+      {/* VIEW 1: CATEGORY CARDS VIEW (When no category is selected) */}
+      {!selectedCategory && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+            <div>
+              <h2 className="text-lg font-extrabold text-gray-900 flex items-center gap-2">
+                <Layers className="h-5 w-5 text-emerald-600" /> अपना पद / विषय चुनें (Select Subject Sector)
+              </h2>
+              <p className="text-xs text-gray-500 mt-1 font-medium">
+                जिस परीक्षा की आप तैयारी कर रहे हैं उस कार्ड पर क्लिक करके विषयवार डेली प्रैक्टिस सेट हल करें:
+              </p>
+            </div>
+            <span className="hidden sm:inline-flex text-xs font-extrabold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+              कुल सेट: {sets.length}
+            </span>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {sets.map((set, idx) => {
-              const qCount = set.questions?.length || 0;
-              const isToday = idx === 0;
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {effectiveCategories.map(cat => {
+              const count = sets.filter(s => {
+                const setCat = (s.category || s.subject || 'सहायक शिक्षक').trim().toLowerCase();
+                const catName = cat.name.trim().toLowerCase();
+                return setCat === catName;
+              }).length;
+              const IconComp = getCategoryIcon(cat.iconName);
 
               return (
-                <div 
-                  key={set.id}
-                  className="bg-white rounded-2xl border border-gray-200 p-5 hover:shadow-md transition space-y-4 flex flex-col justify-between group hover:border-emerald-300"
+                <div
+                  key={cat.id || cat.name}
+                  onClick={() => setSelectedCategory(cat.name)}
+                  className="bg-white rounded-2xl border-2 border-emerald-100 hover:border-emerald-400 hover:shadow-lg p-6 transition-all duration-200 flex flex-col justify-between cursor-pointer group transform hover:-translate-y-1"
                 >
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200 flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5 text-emerald-600" /> {set.date}
+                      <div className="p-3 rounded-2xl bg-emerald-600 text-white shadow-sm group-hover:scale-110 transition-transform">
+                        <IconComp className="h-6 w-6" />
+                      </div>
+                      <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${cat.badgeColor || 'bg-emerald-100 text-emerald-900 border-emerald-300'}`}>
+                        {count} अभ्यास सेट
                       </span>
-                      {isToday && (
-                        <span className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-md animate-pulse">
-                          🔥 आज का सेट
-                        </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-extrabold text-gray-900 group-hover:text-emerald-700 transition">
+                        {cat.name}
+                      </h3>
+                      {cat.subLabel && (
+                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">
+                          {cat.subLabel}
+                        </p>
                       )}
                     </div>
 
-                    <h3 className="text-base font-extrabold text-gray-900 group-hover:text-emerald-700 transition leading-snug pt-1">
-                      {set.title}
-                    </h3>
+                    <p className="text-xs text-gray-600 leading-relaxed font-medium">
+                      {cat.description || `${cat.name} परीक्षा हेतु महत्वपूर्ण अभ्यास सेट`}
+                    </p>
                   </div>
 
-                  <button
-                    onClick={() => handleStartSet(set)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs group-hover:bg-emerald-700 mt-2"
-                  >
-                    <Zap className="h-4 w-4 text-amber-300" /> प्रैक्टिस शुरू करें (Start Practice)
-                  </button>
+                  <div className="pt-4 mt-4 border-t border-gray-100 flex items-center justify-between text-xs font-extrabold text-emerald-700 group-hover:text-emerald-800">
+                    <span>डेली प्रैक्टिस सेट देखें</span>
+                    <div className="bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white p-1.5 rounded-lg transition">
+                      <ChevronRight className="h-4 w-4" />
+                    </div>
+                  </div>
                 </div>
               );
             })}
+
+            {/* Combined All Categories Card */}
+            <div
+              onClick={() => setSelectedCategory('all')}
+              className="bg-gradient-to-br from-teal-900 to-emerald-950 text-white rounded-2xl border-2 border-teal-700 hover:border-amber-400 p-6 transition-all duration-200 shadow-md hover:shadow-xl flex flex-col justify-between cursor-pointer group transform hover:-translate-y-1"
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="p-3 rounded-2xl bg-amber-400 text-gray-950 shadow-sm group-hover:scale-110 transition-transform">
+                    <GraduationCap className="h-6 w-6" />
+                  </div>
+                  <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/40">
+                    {sets.length} कुल सेट
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-extrabold text-white group-hover:text-amber-300 transition">
+                    सभी विषय / पद सेट (All Sets)
+                  </h3>
+                  <p className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider mt-0.5">
+                    Combined Practice Repository
+                  </p>
+                </div>
+
+                <p className="text-xs text-emerald-100 leading-relaxed font-medium">
+                  शिक्षक एवं सहायक शिक्षक परीक्षा के सभी विषयों व तिथियों के डेली प्रैक्टिस सेट एक साथ देखें।
+                </p>
+              </div>
+
+              <div className="pt-4 mt-4 border-t border-white/10 flex items-center justify-between text-xs font-extrabold text-amber-300">
+                <span>सभी टेस्ट देखें</span>
+                <div className="bg-white/10 group-hover:bg-amber-400 group-hover:text-gray-950 p-1.5 rounded-lg transition">
+                  <ChevronRight className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* VIEW 2: DATE-WISE PRACTICE SETS VIEW (When a category card is selected) */}
+      {selectedCategory && (
+        <div className="space-y-6">
+          {/* Back Button & Category Info Header Bar */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className="bg-white hover:bg-emerald-100 text-emerald-900 font-extrabold px-4 py-2.5 rounded-xl text-xs border border-emerald-300 transition flex items-center gap-2 cursor-pointer shadow-xs"
+            >
+              <ArrowLeft className="h-4 w-4 text-emerald-700" /> ← अन्य विषय / पद श्रेणियां देखें
+            </button>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-emerald-800 font-bold hidden sm:inline">चयनित श्रेणी:</span>
+              <span className={`text-xs font-extrabold px-3.5 py-1.5 rounded-xl border shadow-2xs ${activeCategoryObj?.badgeColor || 'bg-emerald-100 text-emerald-900 border-emerald-300'}`}>
+                {activeCategoryObj?.name || (selectedCategory === 'all' ? 'सभी पद (All Sets)' : selectedCategory)}
+              </span>
+              <span className="text-xs font-extrabold text-emerald-900 bg-white px-3 py-1.5 rounded-xl border border-emerald-200">
+                {filteredSets.length} सेट उपलब्ध
+              </span>
+            </div>
+          </div>
+
+          {/* Secondary Quick Category Filter Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <span className="text-[11px] font-extrabold text-gray-500 whitespace-nowrap flex items-center gap-1">
+              <Filter className="h-3.5 w-3.5" /> पद बदलें:
+            </span>
+            {categories.map(cat => {
+              const isActive = selectedCategory === cat.name;
+              return (
+                <button
+                  key={cat.id || cat.name}
+                  onClick={() => setSelectedCategory(cat.name)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold whitespace-nowrap transition cursor-pointer ${
+                    isActive
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'bg-white text-gray-700 border border-gray-200 hover:bg-emerald-50 hover:border-emerald-300'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold whitespace-nowrap transition cursor-pointer ${
+                selectedCategory === 'all'
+                  ? 'bg-teal-800 text-white shadow-xs'
+                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-teal-50 hover:border-teal-300'
+              }`}
+            >
+              सभी पद (All)
+            </button>
+          </div>
+
+          {/* Sets Grid */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+              <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-emerald-600" /> {activeCategoryObj?.name || (selectedCategory === 'all' ? 'सभी पद' : selectedCategory)} - डेट वाइज प्रैक्टिस सेट सूची
+              </h2>
+            </div>
+
+            {filteredSets.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-10 text-center space-y-4">
+                <BookOpen className="h-12 w-12 text-gray-300 mx-auto" />
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-gray-700">
+                    "{activeCategoryObj?.name || selectedCategory}" श्रेणी में अभी कोई प्रैक्टिस सेट उपलब्ध नहीं है।
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    एडमिन द्वारा जल्द ही इस विषय के नए वस्तुनिष्ठ प्रश्न लाइव किए जाएंगे।
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedCategory(null)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs transition inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4" /> अन्य पद / विषय श्रेणियां देखें
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredSets.map((set, idx) => {
+                  const qCount = set.questions?.length || 0;
+
+                  return (
+                    <div 
+                      key={set.id}
+                      className="bg-white rounded-2xl border border-gray-200 p-5 hover:shadow-md transition space-y-4 flex flex-col justify-between group hover:border-emerald-300"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-extrabold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200 flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-emerald-600" /> {set.date}
+                          </span>
+                          <span className="text-[11px] font-extrabold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">
+                            {set.category || set.subject || 'सामान्य'}
+                          </span>
+                        </div>
+
+                        <h3 className="text-base font-extrabold text-gray-900 group-hover:text-emerald-700 transition leading-snug pt-1">
+                          {set.title}
+                        </h3>
+                        
+                        {set.description && (
+                          <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
+                            {set.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs text-gray-500 font-bold px-1">
+                          <span>{qCount} महत्वपूर्ण प्रश्न</span>
+                          <span>{set.durationMinutes || 20} मिनट</span>
+                        </div>
+                        <button
+                          onClick={() => handleStartSet(set)}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs group-hover:bg-emerald-700"
+                        >
+                          <Zap className="h-4 w-4 text-amber-300" /> प्रैक्टिस शुरू करें (Start Practice)
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

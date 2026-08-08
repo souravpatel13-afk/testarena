@@ -132,12 +132,22 @@ export interface DailyPracticeQuestion {
   subjectTag?: string; // e.g. "छत्तीसगढ़ इतिहास", "करंट अफेयर्स"
 }
 
+export interface DailyPracticeCategory {
+  id: string;
+  name: string; // e.g. "सहायक शिक्षक", "शिक्षक कृषि", "शिक्षक हिंदी"
+  subLabel?: string; // e.g. "Assistant Teacher Exam"
+  description?: string; // e.g. "सहायक शिक्षक भर्ती परीक्षा हेतु अभ्यास"
+  badgeColor?: string; // e.g. "bg-amber-100 text-amber-900 border-amber-300"
+  iconName?: string; // e.g. "UserCheck", "Sprout", "BookMarked", "Languages", "Calculator", "Atom", "Briefcase", "GraduationCap"
+}
+
 export interface DailyPracticeSet {
   id: string;
   date: string; // YYYY-MM-DD e.g. "2026-07-29"
   title: string; // e.g. "डेली प्रैक्टिस सेट - 29 जुलाई 2026"
   description?: string;
   subject: string; // e.g. "छत्तीसगढ़ सामान्य ज्ञान एवं समसामयिकी"
+  category?: string; // e.g. "सहायक शिक्षक", "शिक्षक कृषि", "शिक्षक हिंदी", "शिक्षक अंग्रेजी", "शिक्षक गणित", "शिक्षक विज्ञान", "अन्य पद"
   targetExam?: string; // e.g. "CGPSC / व्यापमं / पुलिस भर्ती"
   durationMinutes: number; // e.g. 20
   rawHtmlContent?: string; // Full raw HTML block if uploaded/pasted directly

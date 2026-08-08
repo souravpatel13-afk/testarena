@@ -1331,6 +1331,74 @@ app.put('/api/exam-info-reorder', (req, res) => {
 });
 
 // Daily Practice Endpoints
+app.get('/api/daily-practice-categories', (req, res) => {
+  const db = loadDatabase();
+  if (!db.dailyPracticeCategories || db.dailyPracticeCategories.length === 0) {
+    db.dailyPracticeCategories = [
+      {
+        id: "cat-default-1",
+        name: "सहायक शिक्षक",
+        subLabel: "Teacher Sector",
+        description: "सहायक शिक्षक परीक्षा हेतु विशेष वस्तुनिष्ठ प्रश्नोत्तरी एवं अभ्यास सेट",
+        iconName: "GraduationCap",
+        badgeColor: "bg-emerald-100 text-emerald-900 border-emerald-300"
+      }
+    ];
+    saveDatabase(db);
+  }
+  res.json(db.dailyPracticeCategories);
+});
+
+app.post('/api/daily-practice-categories', (req, res) => {
+  const db = loadDatabase();
+  const newCat = req.body;
+  if (!newCat.name) {
+    return res.status(400).json({ error: "Category name is required" });
+  }
+  if (!newCat.id) {
+    newCat.id = "cat-" + Date.now();
+  }
+  if (!db.dailyPracticeCategories) {
+    db.dailyPracticeCategories = [];
+  }
+  
+  const idx = db.dailyPracticeCategories.findIndex((c: any) => c.id === newCat.id || c.name === newCat.name);
+  if (idx > -1) {
+    db.dailyPracticeCategories[idx] = { ...db.dailyPracticeCategories[idx], ...newCat };
+  } else {
+    db.dailyPracticeCategories.push(newCat);
+  }
+  
+  saveDatabase(db);
+  res.json(db.dailyPracticeCategories);
+});
+
+app.delete('/api/daily-practice-categories/:id', (req, res) => {
+  const db = loadDatabase();
+  const rawId = req.params.id;
+  const target = decodeURIComponent(rawId).trim().toLowerCase();
+  
+  if (!db.dailyPracticeCategories) {
+    db.dailyPracticeCategories = [];
+  }
+  
+  db.dailyPracticeCategories = db.dailyPracticeCategories.filter((c: any) => {
+    const cId = (c.id || '').toString().trim().toLowerCase();
+    const cName = (c.name || '').toString().trim().toLowerCase();
+    return cId !== target && cName !== target;
+  });
+  
+  saveDatabase(db);
+  res.json(db.dailyPracticeCategories);
+});
+
+app.delete('/api/daily-practice-categories-all', (req, res) => {
+  const db = loadDatabase();
+  db.dailyPracticeCategories = [];
+  saveDatabase(db);
+  res.json([]);
+});
+
 app.get('/api/daily-practice', (req, res) => {
   const db = loadDatabase();
   const sets = db.dailyPractice || [];

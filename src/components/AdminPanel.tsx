@@ -58,7 +58,7 @@ import {
   Code2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Question, ExamInfo, DailyPracticeSet, DailyPracticeQuestion } from '../types';
+import { Question, ExamInfo, DailyPracticeSet, DailyPracticeQuestion, DailyPracticeCategory } from '../types';
 import { parseCorrectAnswer } from '../utils/quizHelpers';
 import { auth, googleSignIn, logout, getAccessToken, setAccessToken } from '../lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -208,6 +208,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [dpTitle, setDpTitle] = useState('');
   const [dpDescription, setDpDescription] = useState('');
   const [dpSubject, setDpSubject] = useState('छत्तीसगढ़ सामान्य ज्ञान एवं समसामयिकी');
+  const [dpCategory, setDpCategory] = useState<string>('');
   const [dpTargetExam, setDpTargetExam] = useState('CGPSC / व्यापमं');
   const [dpDuration, setDpDuration] = useState<number>(20);
   const [dpQuestions, setDpQuestions] = useState<DailyPracticeQuestion[]>([]);
@@ -217,6 +218,116 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [dpErrorMsg, setDpErrorMsg] = useState<string | null>(null);
   const [dpSaving, setDpSaving] = useState(false);
   const [dpPreviewQuestionIndex, setDpPreviewQuestionIndex] = useState<number | null>(null);
+
+  // Daily Practice Categories States & Handlers
+  const [dpCategories, setDpCategories] = useState<DailyPracticeCategory[]>([]);
+  const [catName, setCatName] = useState('');
+  const [catSubLabel, setCatSubLabel] = useState('');
+  const [catDescription, setCatDescription] = useState('');
+  const [catIconName, setCatIconName] = useState('GraduationCap');
+  const [catBadgeColor, setCatBadgeColor] = useState('bg-emerald-100 text-emerald-900 border-emerald-300');
+  const [catSaving, setCatSaving] = useState(false);
+  const [showCatModal, setShowCatModal] = useState(false);
+
+  const fetchDpCategories = async () => {
+    try {
+      const res = await fetch('/api/daily-practice-categories');
+      if (res.ok) {
+        const data: DailyPracticeCategory[] = await res.json();
+        setDpCategories(data);
+        if (data && data.length > 0) {
+          setDpCategory(prev => {
+            if (!prev || !data.some(c => c.name === prev)) {
+              return data[0].name;
+            }
+            return prev;
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch daily practice categories:", err);
+    }
+  };
+
+  const handleSaveCategory = async () => {
+    const trimmedCatName = catName.trim();
+    if (!trimmedCatName) {
+      alert("कृपया विषय / पद श्रेणी का नाम दर्ज करें।");
+      return;
+    }
+    setCatSaving(true);
+    try {
+      const res = await fetch('/api/daily-practice-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: trimmedCatName,
+          subLabel: catSubLabel.trim() || 'Exam Practice Sector',
+          description: catDescription.trim() || `${trimmedCatName} परीक्षा हेतु विशेष प्रश्नोत्तरी एवं अभ्यास सेट`,
+          iconName: catIconName,
+          badgeColor: catBadgeColor
+        })
+      });
+      if (res.ok) {
+        const updatedCats = await res.json();
+        setDpCategories(updatedCats);
+        setDpCategory(trimmedCatName); // Instantly set as active category for adding practice sets
+        setCatName('');
+        setCatSubLabel('');
+        setCatDescription('');
+        setShowCatModal(false);
+        setDpSuccessMsg(`नई विषय/पद श्रेणी "${trimmedCatName}" सफलतापूर्वक जुड़ गई है! नीचे दिए फॉर्म से इसके लिए प्रश्न सेट सहेजें।`);
+      } else {
+        alert("श्रेणी कार्ड सहेजने में विफल।");
+      }
+    } catch (err: any) {
+      alert("त्रुटि: " + err.message);
+    } finally {
+      setCatSaving(false);
+    }
+  };
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'category' | 'allCategories' | 'dpSet'; id?: string; name?: string } | null>(null);
+
+  const handleDeleteCategory = async (catId: string, name: string) => {
+    try {
+      const targetId = catId || name;
+      const res = await fetch(`/api/daily-practice-categories/${encodeURIComponent(targetId)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        const updatedCats: DailyPracticeCategory[] = await res.json();
+        setDpCategories(updatedCats);
+        if (updatedCats.length > 0) {
+          setDpCategory(updatedCats[0].name);
+        } else {
+          setDpCategory('');
+        }
+        setDpSuccessMsg(`श्रेणी कार्ड "${name}" सफलतापूर्वक हटा दिया गया है!`);
+      } else {
+        setDpErrorMsg("श्रेणी हटाने में विफल।");
+      }
+    } catch (err: any) {
+      setDpErrorMsg("त्रुटि: " + err.message);
+    }
+  };
+
+  const handleDeleteAllCategories = async () => {
+    try {
+      const res = await fetch('/api/daily-practice-categories-all', {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setDpCategories([]);
+        setDpCategory('');
+        setDpSuccessMsg("सभी विषय/पद श्रेणी कार्ड्स सफलतापूर्वक हटा दिए गए हैं!");
+      } else {
+        setDpErrorMsg("श्रेणी हटाने में विफल।");
+      }
+    } catch (err: any) {
+      setDpErrorMsg("त्रुटि: " + err.message);
+    }
+  };
 
   const fetchDailyPractice = async () => {
     setDpLoading(true);
@@ -239,6 +350,11 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     setDpTitle('');
     setDpDescription('');
     setDpSubject('छत्तीसगढ़ सामान्य ज्ञान एवं समसामयिकी');
+    if (dpCategories.length > 0) {
+      setDpCategory(dpCategories[0].name);
+    } else {
+      setDpCategory('');
+    }
     setDpTargetExam('CGPSC / व्यापमं');
     setDpDuration(20);
     setDpQuestions([]);
@@ -253,6 +369,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     setDpTitle(set.title || '');
     setDpDescription(set.description || '');
     setDpSubject(set.subject || 'छत्तीसगढ़ सामान्य ज्ञान एवं समसामयिकी');
+    setDpCategory(set.category || (dpCategories.length > 0 ? dpCategories[0].name : ''));
     setDpTargetExam(set.targetExam || 'CGPSC / व्यापमं');
     setDpDuration(set.durationMinutes || 20);
     setDpQuestions(set.questions || []);
@@ -260,21 +377,25 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     setDpInputMode('form');
     setDpSuccessMsg(null);
     setDpErrorMsg(null);
-    window.scrollTo({ top: 300, behavior: 'smooth' });
+    const el = document.getElementById('dp-set-form');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 300, behavior: 'smooth' });
+    }
   };
 
   const handleDeleteDpSet = async (id: string) => {
-    if (!confirm("क्या आप वाकई इस डेली प्रैक्टिस सेट को हटाना चाहते हैं?")) return;
     try {
-      const res = await fetch(`/api/daily-practice/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/daily-practice/${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (res.ok) {
+        setDpList(prev => prev.filter(item => item.id !== id));
         setDpSuccessMsg("डेली प्रैक्टिस सेट सफलतापूर्वक हटा दिया गया है!");
-        fetchDailyPractice();
         if (dpEditingId === id) {
           handleResetDpForm();
         }
       } else {
-        setDpErrorMsg("सेट हटाने में समस्या आई।");
+        setDpErrorMsg("सेट हटाने में विफल।");
       }
     } catch (err: any) {
       setDpErrorMsg("त्रुटि: " + err.message);
@@ -332,6 +453,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
       title: dpTitle,
       description: dpDescription,
       subject: dpSubject,
+      category: dpCategory,
       targetExam: dpTargetExam,
       durationMinutes: dpDuration,
       questions: dpQuestions,
@@ -484,6 +606,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     fetchCurrentAffairs();
     fetchExams();
     fetchDailyPractice();
+    fetchDpCategories();
 
     return () => unsubscribe();
   }, []);
@@ -1829,13 +1952,215 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
               </div>
             )}
 
+            {/* SUBJECT CARDS MANAGEMENT SECTION */}
+            <div className="bg-white rounded-3xl border border-emerald-200 p-6 shadow-sm space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+                <div>
+                  <h3 className="text-sm font-extrabold text-emerald-950 flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-emerald-600" />
+                    विषय एवं परीक्षा पद कार्ड प्रबंधन (Subject & Exam Post Cards Manager)
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    यहाँ से डेली प्रैक्टिस पेज पर दिखने वाले विषय/परीक्षा कार्ड्स को जोड़ें या डिलीट करें ({dpCategories.length} कार्ड्स उपलब्ध):
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {dpCategories.length > 0 && (
+                    <button
+                      onClick={handleDeleteAllCategories}
+                      className="bg-red-50 hover:bg-red-100 text-red-700 font-bold px-3 py-2 rounded-xl text-xs border border-red-200 transition cursor-pointer flex items-center gap-1"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> सभी कार्ड्स हटाएं
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowCatModal(!showCatModal)}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold px-4 py-2 rounded-xl text-xs transition shadow-sm cursor-pointer flex items-center gap-1.5"
+                  >
+                    <PlusCircle className="h-4 w-4 text-emerald-300" /> {showCatModal ? "फॉर्म बंद करें" : "+ नया सब्जेक्ट कार्ड जोड़ें"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Add Category Form Modal / Panel */}
+              {showCatModal && (
+                <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 space-y-4 animate-fadeIn">
+                  <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
+                    <h4 className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-amber-500" /> नया विषय/पद कार्ड जोड़ें
+                    </h4>
+                    <button onClick={() => setShowCatModal(false)} className="text-xs font-bold text-gray-500 hover:text-gray-800">✕</button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">पद / विषय का नाम*</label>
+                      <input
+                        type="text"
+                        value={catName}
+                        onChange={(e) => setCatName(e.target.value)}
+                        placeholder="उदा. शिक्षक सामाजिक विज्ञान / पटवारी"
+                        className="w-full p-2.5 font-bold border border-emerald-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">उप-शीर्षक (English Tag/Sublabel)</label>
+                      <input
+                        type="text"
+                        value={catSubLabel}
+                        onChange={(e) => setCatSubLabel(e.target.value)}
+                        placeholder="उदा. Social Science Exam"
+                        className="w-full p-2.5 font-semibold border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">आइकॉन चुनें (Icon)</label>
+                      <select
+                        value={catIconName}
+                        onChange={(e) => setCatIconName(e.target.value)}
+                        className="w-full p-2.5 font-bold border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="GraduationCap">🎓 GraduationCap</option>
+                        <option value="UserCheck">👨‍🏫 UserCheck (शिक्षक)</option>
+                        <option value="Sprout">🌱 Sprout (कृषि)</option>
+                        <option value="BookMarked">📖 BookMarked (हिंदी)</option>
+                        <option value="Languages">🔤 Languages (अंग्रेजी)</option>
+                        <option value="Calculator">🔢 Calculator (गणित)</option>
+                        <option value="Atom">⚛️ Atom (विज्ञान)</option>
+                        <option value="Briefcase">💼 Briefcase (अन्य/सामान्य)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">बैज रंग थीम (Badge Style)</label>
+                      <select
+                        value={catBadgeColor}
+                        onChange={(e) => setCatBadgeColor(e.target.value)}
+                        className="w-full p-2.5 font-bold border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="bg-emerald-100 text-emerald-900 border-emerald-300">🟢 Emerald Green</option>
+                        <option value="bg-amber-100 text-amber-900 border-amber-300">🟠 Amber Orange</option>
+                        <option value="bg-blue-100 text-blue-900 border-blue-300">🔵 Blue Accent</option>
+                        <option value="bg-rose-100 text-rose-900 border-rose-300">🔴 Rose Red</option>
+                        <option value="bg-purple-100 text-purple-900 border-purple-300">🟣 Purple Magic</option>
+                        <option value="bg-cyan-100 text-cyan-900 border-cyan-300">🩵 Cyan Sky</option>
+                        <option value="bg-slate-100 text-slate-900 border-slate-300">⚪ Slate Neutral</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1 text-xs">विवरण (Short Description)</label>
+                    <input
+                      type="text"
+                      value={catDescription}
+                      onChange={(e) => setCatDescription(e.target.value)}
+                      placeholder="उदा. शिक्षक सामाजिक विज्ञान पद हेतु इतिहास, भूगोल, अर्थशास्त्र एवं नागरिक शास्त्र अभ्यास"
+                      className="w-full p-2.5 text-xs font-semibold border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => setShowCatModal(false)}
+                      className="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200 rounded-xl cursor-pointer"
+                    >
+                      रद्द करें
+                    </button>
+                    <button
+                      onClick={handleSaveCategory}
+                      disabled={catSaving}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold px-5 py-2 rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Save className="h-4 w-4" /> {catSaving ? "सहेजा जा रहा है..." : "कार्ड सहेजें & लाइव करें"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Active Subject Cards Grid */}
+              {dpCategories.length === 0 ? (
+                <div className="bg-gray-50 border border-dashed border-gray-200 rounded-2xl p-6 text-center space-y-2">
+                  <p className="text-xs font-bold text-gray-600">कोई भी सब्जेक्ट कार्ड एक्टिव नहीं है।</p>
+                  <p className="text-[11px] text-gray-400">ऊपर दिए गए "+ नया सब्जेक्ट कार्ड जोड़ें" बटन पर क्लिक करके नए कार्ड्स बनाएं।</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {dpCategories.map((cat) => {
+                    const isSelected = dpCategory === cat.name;
+                    return (
+                      <div
+                        key={cat.id || cat.name}
+                        className={`rounded-2xl p-3.5 flex flex-col justify-between space-y-2.5 transition ${
+                          isSelected
+                            ? 'bg-emerald-100/70 border-2 border-emerald-600 shadow-xs ring-2 ring-emerald-300/50'
+                            : 'bg-emerald-50/40 border border-emerald-200/80 hover:border-emerald-400'
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border ${cat.badgeColor || 'bg-emerald-100 text-emerald-900 border-emerald-300'}`}>
+                                {cat.name}
+                              </span>
+                              {cat.subLabel && (
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">{cat.subLabel}</p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm({ type: 'category', id: cat.id || cat.name, name: cat.name });
+                              }}
+                              title="श्रेणी कार्ड हटाएं"
+                              className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          <p className="text-[11px] text-gray-600 font-medium line-clamp-2 leading-relaxed">
+                            {cat.description || `${cat.name} परीक्षा हेतु वस्तुनिष्ठ प्रश्न`}
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setDpCategory(cat.name);
+                            const el = document.getElementById('dp-set-form');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          className={`w-full py-1.5 px-2 rounded-xl text-[11px] font-extrabold transition cursor-pointer flex items-center justify-center gap-1 ${
+                            isSelected
+                              ? 'bg-emerald-800 text-white shadow-xs'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          }`}
+                        >
+                          <PlusCircle className="h-3.5 w-3.5 text-amber-300" />
+                          {isSelected ? '✓ चयनित (प्रश्न जोड़ें)' : '+ इस कार्ड में प्रश्न जोड़ें'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {/* Set Details Form */}
-            <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-6">
-              <div className="border-b border-gray-100 pb-4 flex items-center justify-between">
-                <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
-                  <Edit3 className="h-4 w-4 text-emerald-600" />
-                  {dpEditingId ? "दैनिक अभ्यास सेट संशोधित करें (Edit Set)" : "नया दैनिक अभ्यास सेट बनाएं (Create Daily Set)"}
-                </h3>
+            <div id="dp-set-form" className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-6">
+              <div className="border-b border-gray-100 pb-4 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                    <Edit3 className="h-4 w-4 text-emerald-600" />
+                    {dpEditingId ? "दैनिक अभ्यास सेट संशोधित करें (Edit Set)" : "नया दैनिक अभ्यास सेट बनाएं (Create Daily Set)"}
+                  </h3>
+                  <p className="text-xs text-emerald-800 font-bold mt-1 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg inline-block">
+                    🎯 यह प्रश्न सेट <b>[{dpCategory || 'कोई श्रेणी नहीं'}]</b> कार्ड के अंतर्गत सेव होगा।
+                  </p>
+                </div>
                 {dpEditingId && (
                   <span className="text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-md font-mono font-bold border border-amber-200">
                     संशोधित हो रहा है: {dpEditingId}
@@ -1844,7 +2169,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
               </div>
 
               {/* Set Metadata Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
                 <div>
                   <label className="text-xs font-bold text-gray-700 block mb-1">दिनांक (Date)*</label>
                   <input
@@ -1853,6 +2178,31 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                     onChange={(e) => setDpDate(e.target.value)}
                     className="w-full p-2.5 text-xs font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-gray-50/50"
                   />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-emerald-900 block mb-1">पद / परीक्षा श्रेणी (Category)*</label>
+                  {dpCategories.length > 0 ? (
+                    <select
+                      value={dpCategory}
+                      onChange={(e) => setDpCategory(e.target.value)}
+                      className="w-full p-2.5 text-xs font-bold border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-emerald-50 text-emerald-950"
+                    >
+                      {dpCategories.map((cat) => (
+                        <option key={cat.id || cat.name} value={cat.name}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={dpCategory}
+                      onChange={(e) => setDpCategory(e.target.value)}
+                      placeholder="उदा. सहायक शिक्षक / सामान्य"
+                      className="w-full p-2.5 text-xs font-bold border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-emerald-50 text-emerald-950"
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -1867,7 +2217,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">विषय (Subject Category)</label>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">विषय (Subject)</label>
                   <input
                     type="text"
                     value={dpSubject}
@@ -2206,6 +2556,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                     <thead>
                       <tr className="bg-gray-50 text-gray-700 border-b border-gray-200">
                         <th className="p-3 font-extrabold">दिनांक</th>
+                        <th className="p-3 font-extrabold">श्रेणी (Category)</th>
                         <th className="p-3 font-extrabold">शीर्षक</th>
                         <th className="p-3 font-extrabold">लक्ष्य परीक्षा</th>
                         <th className="p-3 font-extrabold">प्रश्न संख्या</th>
@@ -2218,6 +2569,11 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                           <td className="p-3 font-bold text-emerald-800 whitespace-nowrap">
                             {item.date}
                           </td>
+                          <td className="p-3 font-bold whitespace-nowrap">
+                            <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-1 rounded-md text-[11px]">
+                              {item.category || 'सहायक शिक्षक'}
+                            </span>
+                          </td>
                           <td className="p-3 font-extrabold text-gray-900">
                             {item.title}
                           </td>
@@ -2229,13 +2585,21 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                           </td>
                           <td className="p-3 text-right whitespace-nowrap space-x-2">
                             <button
-                              onClick={() => handleEditDpSet(item)}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditDpSet(item);
+                              }}
                               className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-3 py-1.5 rounded-lg font-bold border border-emerald-200 transition cursor-pointer"
                             >
                               संपादित करें
                             </button>
                             <button
-                              onClick={() => handleDeleteDpSet(item.id)}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm({ type: 'dpSet', id: item.id, name: item.title });
+                              }}
                               className="bg-red-50 text-red-700 hover:bg-red-100 px-3 py-1.5 rounded-lg font-bold border border-red-200 transition cursor-pointer"
                             >
                               हटाएं
@@ -2248,6 +2612,57 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                 </div>
               )}
             </div>
+
+            {/* Custom Confirmation Modal for Deletions */}
+            {deleteConfirm && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+                <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center gap-3 text-red-600 border-b border-gray-100 pb-3">
+                    <div className="p-2.5 bg-red-100/80 rounded-2xl">
+                      <Trash2 className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-gray-900">डिलीट करने की पुष्टि करें</h3>
+                      <p className="text-[11px] text-gray-400 font-bold">Confirmation Required</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-700 font-bold leading-relaxed bg-red-50/50 p-3.5 rounded-2xl border border-red-100">
+                    {deleteConfirm.type === 'category' && `क्या आप वाकई "${deleteConfirm.name}" विषय/पद श्रेणी कार्ड को हटाना चाहते हैं?`}
+                    {deleteConfirm.type === 'allCategories' && `क्या आप वाकई सभी विषय/पद श्रेणी कार्ड्स को हटाना चाहते हैं?`}
+                    {deleteConfirm.type === 'dpSet' && `क्या आप वाकई "${deleteConfirm.name || 'इस अभ्यास सेट'}" को हटाना चाहते हैं?`}
+                  </p>
+
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirm(null)}
+                      className="px-4 py-2.5 rounded-xl text-xs font-extrabold text-gray-600 hover:bg-gray-100 transition cursor-pointer border border-gray-200"
+                    >
+                      रद्द करें (Cancel)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const target = deleteConfirm;
+                        setDeleteConfirm(null);
+                        if (target.type === 'category' && target.id && target.name) {
+                          await handleDeleteCategory(target.id, target.name);
+                        } else if (target.type === 'allCategories') {
+                          await handleDeleteAllCategories();
+                        } else if (target.type === 'dpSet' && target.id) {
+                          await handleDeleteDpSet(target.id);
+                        }
+                      }}
+                      className="px-5 py-2.5 rounded-xl text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 transition cursor-pointer shadow-md flex items-center gap-1.5"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      हाँ, हटाएं (Yes, Delete)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
