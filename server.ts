@@ -324,16 +324,29 @@ function loadDatabase() {
       if (data && data.trim()) {
         const db = JSON.parse(data);
         let dirty = false;
-        if (!db.currentAffairs) {
+        if (!db.currentAffairs || db.currentAffairs.length === 0) {
           db.currentAffairs = initialCurrentAffairs;
           dirty = true;
         }
-        if (!db.examInfo) {
+        if (!db.examInfo || db.examInfo.length === 0) {
           db.examInfo = initialExamInfo;
           dirty = true;
         }
-        if (!db.dailyPractice) {
+        if (!db.dailyPractice || db.dailyPractice.length === 0) {
           db.dailyPractice = initialDailyPractice;
+          dirty = true;
+        }
+        if (!db.dailyPracticeCategories || db.dailyPracticeCategories.length === 0) {
+          db.dailyPracticeCategories = [
+            {
+              id: "cat-default-1",
+              name: "सहायक शिक्षक",
+              subLabel: "Teacher Sector",
+              description: "सहायक शिक्षक परीक्षा हेतु विशेष वस्तुनिष्ठ प्रश्नोत्तरी एवं अभ्यास सेट",
+              iconName: "GraduationCap",
+              badgeColor: "bg-emerald-100 text-emerald-900 border-emerald-300"
+            }
+          ];
           dirty = true;
         }
         if (!db.user || db.user.name === "Sourav Patel") {
@@ -1401,9 +1414,16 @@ app.delete('/api/daily-practice-categories-all', (req, res) => {
 
 app.get('/api/daily-practice', (req, res) => {
   const db = loadDatabase();
-  const sets = db.dailyPractice || [];
-  // Sort by date descending
-  sets.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const rawSets = db.dailyPractice || [];
+  const sets = Array.isArray(rawSets) ? [...rawSets] : [];
+  // Sort by date descending safely
+  sets.sort((a: any, b: any) => {
+    const timeA = (a && a.date) ? new Date(a.date).getTime() : 0;
+    const timeB = (b && b.date) ? new Date(b.date).getTime() : 0;
+    const safeA = isNaN(timeA) ? 0 : timeA;
+    const safeB = isNaN(timeB) ? 0 : timeB;
+    return safeB - safeA;
+  });
   res.json(sets);
 });
 

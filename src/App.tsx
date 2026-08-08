@@ -104,6 +104,20 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Sync initial activeTab from URL search param or hash if available
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      const hashParam = window.location.hash.replace('#', '');
+      const initialTab = tabParam || hashParam;
+      const validTabs = ['home', 'daily-practice', 'exam-info', 'dashboard', 'pyqs', 'subjects', 'current-affairs', 'about', 'contact', 'admin', 'privacy', 'terms', 'disclaimer'];
+      if (initialTab && validTabs.includes(initialTab)) {
+        setActiveTab(initialTab as any);
+      }
+    } catch (e) {
+      console.error("Error reading URL parameters:", e);
+    }
+
     loadData();
   }, []);
 

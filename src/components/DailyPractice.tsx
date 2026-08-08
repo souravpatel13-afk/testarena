@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Component } from 'react';
 import { 
   Calendar, 
   CheckCircle, 
@@ -47,7 +47,7 @@ const getCategoryIcon = (iconName?: string) => {
   }
 };
 
-export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
+function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
   const [sets, setSets] = useState<DailyPracticeSet[]>([]);
   const [categories, setCategories] = useState<DailyPracticeCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,16 +65,19 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
 
   const fetchDailyPracticeSets = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/daily-practice');
       if (res.ok) {
         const data = await res.json();
-        setSets(data);
+        setSets(Array.isArray(data) ? data : []);
       } else {
         throw new Error('Failed to load daily practice sets');
       }
     } catch (err: any) {
+      console.error("Error fetching daily practice sets:", err);
       setError(err.message || 'Error fetching data');
+      setSets([]);
     } finally {
       setLoading(false);
     }
@@ -85,7 +88,7 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
       const res = await fetch('/api/daily-practice-categories');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setCategories(data);
         }
       }
@@ -136,9 +139,11 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
     setIsFinished(true);
     // Show all explanations on review
     const allExp: Record<number, boolean> = {};
-    activeSet?.questions.forEach((_, idx) => {
-      allExp[idx] = true;
-    });
+    if (activeSet && Array.isArray(activeSet.questions)) {
+      activeSet.questions.forEach((_, idx) => {
+        allExp[idx] = true;
+      });
+    }
     setShowExplanations(allExp);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -151,7 +156,9 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
 
   // Calculate Results
   const calculateScore = () => {
-    if (!activeSet) return { correct: 0, wrong: 0, skipped: 0, score: 0, maxScore: 0, percentage: '0.0' };
+    if (!activeSet || !Array.isArray(activeSet.questions) || activeSet.questions.length === 0) {
+      return { correct: 0, wrong: 0, skipped: 0, score: 0, maxScore: 0, percentage: '0.0' };
+    }
     let correct = 0;
     let wrong = 0;
     let skipped = 0;
@@ -161,6 +168,7 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
     const negativeMark = 0.66; // 1/3 negative marking
 
     activeSet.questions.forEach((q, idx) => {
+      if (!q) return;
       const ans = selectedAnswers[idx];
       if (ans === undefined) {
         skipped++;
@@ -381,8 +389,9 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
             {questions.map((_, idx) => {
               const isCurrent = idx === currentIndex;
               const isAnswered = selectedAnswers[idx] !== undefined;
-              const isCorrect = isFinished && selectedAnswers[idx] === questions[idx].correctAnswer;
-              const isWrong = isFinished && isAnswered && selectedAnswers[idx] !== questions[idx].correctAnswer;
+              const qItem = questions[idx];
+              const isCorrect = isFinished && qItem && selectedAnswers[idx] === qItem.correctAnswer;
+              const isWrong = isFinished && isAnswered && qItem && selectedAnswers[idx] !== qItem.correctAnswer;
 
               let btnBg = "bg-gray-100 text-gray-700 hover:bg-gray-200";
               if (isFinished) {
@@ -427,7 +436,7 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
               {/* HTML Rendered Question Text */}
               <div 
                 className="text-base sm:text-lg font-bold text-gray-900 leading-relaxed space-y-2 prose prose-emerald max-w-none"
-                dangerouslySetInnerHTML={{ __html: currentQuestion.questionHtml }}
+                dangerouslySetInnerHTML={{ __html: currentQuestion?.questionHtml || '' }}
               />
             </div>
 
@@ -437,7 +446,7 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
                 विकल्प चुनें (Select Option):
               </p>
               <div className="grid grid-cols-1 gap-2.5">
-                {currentQuestion.optionsHtml.map((optHtml, oIdx) => {
+                {(Array.isArray(currentQuestion?.optionsHtml) ? currentQuestion.optionsHtml : []).map((optHtml, oIdx) => {
                   const isSelected = selectedAnswers[currentIndex] === oIdx;
                   const isAnswered = selectedAnswers[currentIndex] !== undefined;
                   const isCorrectAnswer = currentQuestion.correctAnswer === oIdx;
@@ -542,22 +551,46 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
     );
   }
 
+  if (error) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center py-12 px-4 text-center space-y-4">
+        <div className="p-3 bg-red-100 text-red-600 rounded-full">
+          <HelpCircle className="h-8 w-8" />
+        </div>
+        <h3 className="text-base font-bold text-gray-800">डेली प्रैक्टिस सेट लोड करने में समस्या आई</h3>
+        <p className="text-xs text-gray-500 max-w-md">{error}</p>
+        <button
+          onClick={() => {
+            fetchDailyPracticeSets();
+            fetchCategories();
+          }}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition cursor-pointer"
+        >
+          पुनः प्रयास करें (Retry)
+        </button>
+      </div>
+    );
+  }
+
   // Combine explicit categories with auto-detected categories from sets (ensuring 'सहायक शिक्षक' and existing sets always have a card)
   const effectiveCategories = useMemo(() => {
-    const list = [...categories];
-    sets.forEach(set => {
-      const catName = (set.category || set.subject || 'सहायक शिक्षक').trim();
-      if (catName && !list.some(c => c.name.trim().toLowerCase() === catName.toLowerCase())) {
-        list.push({
-          id: 'auto-' + catName,
-          name: catName,
-          subLabel: 'Teacher Sector',
-          description: `${catName} परीक्षा हेतु विशेष प्रश्नोत्तरी एवं अभ्यास सेट`,
-          iconName: 'GraduationCap',
-          badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300'
-        });
-      }
-    });
+    const list = Array.isArray(categories) ? [...categories] : [];
+    if (Array.isArray(sets)) {
+      sets.forEach(set => {
+        if (!set) return;
+        const catName = (set.category || set.subject || 'सहायक शिक्षक').trim();
+        if (catName && !list.some(c => c && c.name && c.name.trim().toLowerCase() === catName.toLowerCase())) {
+          list.push({
+            id: 'auto-' + catName,
+            name: catName,
+            subLabel: 'Teacher Sector',
+            description: `${catName} परीक्षा हेतु विशेष प्रश्नोत्तरी एवं अभ्यास सेट`,
+            iconName: 'GraduationCap',
+            badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300'
+          });
+        }
+      });
+    }
     if (list.length === 0) {
       list.push({
         id: 'cat-default-1',
@@ -572,9 +605,10 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
   }, [categories, sets]);
 
   // Filter Sets by Selected Category
-  const filteredSets = sets.filter(set => {
+  const filteredSets = (Array.isArray(sets) ? sets : []).filter(set => {
+    if (!set) return false;
     if (!selectedCategory || selectedCategory === 'all') return true;
-    const targetCat = selectedCategory.trim().toLowerCase();
+    const targetCat = (selectedCategory || '').trim().toLowerCase();
     const setCat = (set.category || set.subject || 'सहायक शिक्षक').trim().toLowerCase();
     return setCat === targetCat;
   });
@@ -860,5 +894,54 @@ export default function DailyPractice({ onBackToHome }: DailyPracticeProps) {
         </div>
       )}
     </div>
+  );
+}
+
+class DailyPracticeErrorBoundary extends (Component as any) {
+  state = {
+    hasError: false,
+    error: null as Error | null
+  };
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: any) {
+    console.error("DailyPractice Error Boundary Caught Error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-[50vh] flex flex-col items-center justify-center py-12 px-4 text-center space-y-4">
+          <div className="p-3 bg-amber-100 text-amber-800 rounded-full">
+            <HelpCircle className="h-8 w-8" />
+          </div>
+          <h3 className="text-base font-bold text-gray-800">डेली प्रैक्टिस प्रदर्शित करने में त्रुटि हुई</h3>
+          <p className="text-xs text-gray-500 max-w-md">
+            {this.state.error?.message || "कृपया पेज को पुनः रिफ्रेश करें"}
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition cursor-pointer"
+          >
+            पेज रिफ्रेश करें (Reload)
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function DailyPractice(props: DailyPracticeProps) {
+  return (
+    <DailyPracticeErrorBoundary>
+      <DailyPracticeContent {...props} />
+    </DailyPracticeErrorBoundary>
   );
 }
