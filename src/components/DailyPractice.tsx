@@ -104,6 +104,38 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
 
   const [copiedShare, setCopiedShare] = useState(false);
 
+  // Combine explicit categories with auto-detected categories from sets (ensuring 'सहायक शिक्षक' and existing sets always have a card)
+  const effectiveCategories = useMemo(() => {
+    const list = Array.isArray(categories) ? [...categories] : [];
+    if (Array.isArray(sets)) {
+      sets.forEach(set => {
+        if (!set) return;
+        const catName = (set.category || set.subject || 'सहायक शिक्षक').trim();
+        if (catName && !list.some(c => c && c.name && c.name.trim().toLowerCase() === catName.toLowerCase())) {
+          list.push({
+            id: 'auto-' + catName,
+            name: catName,
+            subLabel: 'Teacher Sector',
+            description: `${catName} परीक्षा हेतु विशेष प्रश्नोत्तरी एवं अभ्यास सेट`,
+            iconName: 'GraduationCap',
+            badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300'
+          });
+        }
+      });
+    }
+    if (list.length === 0) {
+      list.push({
+        id: 'cat-default-1',
+        name: 'सहायक शिक्षक',
+        subLabel: 'Teacher Sector',
+        description: 'सहायक शिक्षक परीक्षा हेतु विशेष वस्तुनिष्ठ प्रश्नोत्तरी एवं अभ्यास सेट',
+        iconName: 'GraduationCap',
+        badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300'
+      });
+    }
+    return list;
+  }, [categories, sets]);
+
   // Timer Effect
   useEffect(() => {
     let interval: any = null;
@@ -571,38 +603,6 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
       </div>
     );
   }
-
-  // Combine explicit categories with auto-detected categories from sets (ensuring 'सहायक शिक्षक' and existing sets always have a card)
-  const effectiveCategories = useMemo(() => {
-    const list = Array.isArray(categories) ? [...categories] : [];
-    if (Array.isArray(sets)) {
-      sets.forEach(set => {
-        if (!set) return;
-        const catName = (set.category || set.subject || 'सहायक शिक्षक').trim();
-        if (catName && !list.some(c => c && c.name && c.name.trim().toLowerCase() === catName.toLowerCase())) {
-          list.push({
-            id: 'auto-' + catName,
-            name: catName,
-            subLabel: 'Teacher Sector',
-            description: `${catName} परीक्षा हेतु विशेष प्रश्नोत्तरी एवं अभ्यास सेट`,
-            iconName: 'GraduationCap',
-            badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300'
-          });
-        }
-      });
-    }
-    if (list.length === 0) {
-      list.push({
-        id: 'cat-default-1',
-        name: 'सहायक शिक्षक',
-        subLabel: 'Teacher Sector',
-        description: 'सहायक शिक्षक परीक्षा हेतु विशेष वस्तुनिष्ठ प्रश्नोत्तरी एवं अभ्यास सेट',
-        iconName: 'GraduationCap',
-        badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300'
-      });
-    }
-    return list;
-  }, [categories, sets]);
 
   // Filter Sets by Selected Category
   const filteredSets = (Array.isArray(sets) ? sets : []).filter(set => {
