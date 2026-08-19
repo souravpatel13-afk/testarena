@@ -28,6 +28,8 @@ import {
   Layers
 } from 'lucide-react';
 import { DailyPracticeSet, DailyPracticeQuestion, DailyPracticeCategory } from '../types';
+import ShareModal from './ShareModal';
+import { ShareOptions } from '../utils/shareUtils';
 
 interface DailyPracticeProps {
   onBackToHome?: () => void;
@@ -53,6 +55,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [shareConfig, setShareConfig] = useState<ShareOptions | null>(null);
 
   // Active Practice State
   const [activeSet, setActiveSet] = useState<DailyPracticeSet | null>(null);
@@ -149,6 +152,86 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
     return () => clearInterval(interval);
   }, [activeSet, isFinished]);
 
+  // Initial check from URL hash
+  useEffect(() => {
+    try {
+      const hash = window.location.hash.replace('#', '');
+      const parts = hash.split('/');
+      if (parts[0] === 'daily-practice' && parts[1]) {
+        setSelectedCategory(decodeURIComponent(parts[1]));
+      }
+    } catch (e) {
+      console.error("Error reading daily practice URL:", e);
+    }
+  }, []);
+
+  // PopState (Mobile Back Button) Listener inside Daily Practice
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // 1. Close share modal if open
+      if (shareConfig) {
+        setShareConfig(null);
+        return;
+      }
+
+      // 2. If user is currently running a practice test set
+      if (activeSet) {
+        if (!isFinished) {
+          const confirmExit = window.confirm("क्या आप दैनिक अभ्यास टेस्ट छोड़ना चाहते हैं? आपकी प्रगति सुरक्षित नहीं होगी।");
+          if (confirmExit) {
+            setActiveSet(null);
+            setIsFinished(false);
+          } else {
+            // Re-push test state so history stays synchronized
+            window.history.pushState(
+              { tab: 'daily-practice', category: selectedCategory, setDate: activeSet.date, view: 'daily-test' }, 
+              '', 
+              `#daily-practice/test/${encodeURIComponent(activeSet.date)}`
+            );
+          }
+        } else {
+          // Finished viewing scorecard -> return to category sets list
+          setActiveSet(null);
+          setIsFinished(false);
+        }
+        return;
+      }
+
+      // 3. If viewing a specific category sets list
+      const stateCat = event.state?.category;
+      const hashParts = window.location.hash.replace('#', '').split('/');
+      const hashCat = hashParts[0] === 'daily-practice' && hashParts[1] && hashParts[1] !== 'test'
+        ? decodeURIComponent(hashParts[1]) 
+        : null;
+
+      if (stateCat || hashCat) {
+        setSelectedCategory(stateCat || hashCat);
+      } else if (selectedCategory) {
+        setSelectedCategory(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [shareConfig, activeSet, isFinished, selectedCategory]);
+
+  const handleSelectCategory = (catName: string) => {
+    setSelectedCategory(catName);
+    window.history.pushState(
+      { tab: 'daily-practice', category: catName, view: 'daily-category' }, 
+      '', 
+      `#daily-practice/${encodeURIComponent(catName)}`
+    );
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBackToCategories = () => {
+    setSelectedCategory(null);
+    setActiveSet(null);
+    window.history.pushState({ tab: 'daily-practice', view: 'tab' }, '', '#daily-practice');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleStartSet = (set: DailyPracticeSet) => {
     setActiveSet(set);
     setCurrentIndex(0);
@@ -156,7 +239,41 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
     setShowExplanations({});
     setIsFinished(false);
     setTimerSeconds(0);
+    window.history.pushState(
+      { tab: 'daily-practice', category: selectedCategory, setDate: set.date, view: 'daily-test' }, 
+      '', 
+      `#daily-practice/test/${encodeURIComponent(set.date)}`
+    );
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleExitSet = () => {
+    if (!isFinished) {
+      if (confirm("क्या आप टेस्ट छोड़ना चाहते हैं? आपकी प्रगति सुरक्षित नहीं होगी।")) {
+        setActiveSet(null);
+        if (selectedCategory) {
+          window.history.pushState(
+            { tab: 'daily-practice', category: selectedCategory, view: 'daily-category' }, 
+            '', 
+            `#daily-practice/${encodeURIComponent(selectedCategory)}`
+          );
+        } else {
+          window.history.pushState({ tab: 'daily-practice', view: 'tab' }, '', '#daily-practice');
+        }
+      }
+    } else {
+      setActiveSet(null);
+      setIsFinished(false);
+      if (selectedCategory) {
+        window.history.pushState(
+          { tab: 'daily-practice', category: selectedCategory, view: 'daily-category' }, 
+          '', 
+          `#daily-practice/${encodeURIComponent(selectedCategory)}`
+        );
+      } else {
+        window.history.pushState({ tab: 'daily-practice', view: 'tab' }, '', '#daily-practice');
+      }
+    }
   };
 
   const handleOptionSelect = (qIndex: number, optIndex: number) => {
@@ -272,7 +389,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
         <div className="bg-white rounded-2xl border border-emerald-100 p-4 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setActiveSet(null)}
+              onClick={handleExitSet}
               className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold"
             >
               <ArrowLeft className="h-4 w-4" /> वापस सूची
@@ -375,18 +492,30 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-emerald-700/40">
               <div className="flex flex-wrap items-center gap-2">
                 <button
-                  onClick={handleShareResultWhatsApp}
+                  onClick={() => setShareConfig({
+                    type: 'result',
+                    quizTitle: activeSet.title,
+                    score: stats.score,
+                    maxScore: stats.maxScore,
+                    percentage: stats.percentage,
+                    correct: stats.correct,
+                    wrong: stats.wrong
+                  })}
                   className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 shadow-md cursor-pointer transform hover:scale-105"
                 >
                   <Share2 className="h-4 w-4 text-slate-950" />
-                  व्हाट्सएप पर टेस्ट शेयर करें (Share Test)
+                  स्कोरकार्ड शेयर करें (Share Result)
                 </button>
 
                 <button
-                  onClick={handleCopyResultLink}
+                  onClick={() => setShareConfig({
+                    type: 'daily',
+                    date: activeSet.date,
+                    subject: activeSet.title
+                  })}
                   className="bg-white/10 hover:bg-white/20 text-white font-bold px-3 py-2.5 rounded-xl text-xs transition border border-white/20 cursor-pointer flex items-center gap-1.5"
                 >
-                  {copiedShare ? "✓ लिंक कॉपी हो गया!" : "लिंक कॉपी करें"}
+                  <Share2 className="h-3.5 w-3.5" /> टेस्ट शेयर करें
                 </button>
               </div>
 
@@ -681,7 +810,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
               return (
                 <div
                   key={cat.id || cat.name}
-                  onClick={() => setSelectedCategory(cat.name)}
+                  onClick={() => handleSelectCategory(cat.name)}
                   className="bg-white rounded-2xl border-2 border-emerald-100 hover:border-emerald-400 hover:shadow-lg p-6 transition-all duration-200 flex flex-col justify-between cursor-pointer group transform hover:-translate-y-1"
                 >
                   <div className="space-y-4">
@@ -722,7 +851,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
 
             {/* Combined All Categories Card */}
             <div
-              onClick={() => setSelectedCategory('all')}
+              onClick={() => handleSelectCategory('all')}
               className="bg-gradient-to-br from-teal-900 to-emerald-950 text-white rounded-2xl border-2 border-teal-700 hover:border-amber-400 p-6 transition-all duration-200 shadow-md hover:shadow-xl flex flex-col justify-between cursor-pointer group transform hover:-translate-y-1"
             >
               <div className="space-y-4">
@@ -766,7 +895,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
           {/* Back Button & Category Info Header Bar */}
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
             <button
-              onClick={() => setSelectedCategory(null)}
+              onClick={handleBackToCategories}
               className="bg-white hover:bg-emerald-100 text-emerald-900 font-extrabold px-4 py-2.5 rounded-xl text-xs border border-emerald-300 transition flex items-center gap-2 cursor-pointer shadow-xs"
             >
               <ArrowLeft className="h-4 w-4 text-emerald-700" /> ← अन्य विषय / पद श्रेणियां देखें
@@ -793,7 +922,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
               return (
                 <button
                   key={cat.id || cat.name}
-                  onClick={() => setSelectedCategory(cat.name)}
+                  onClick={() => handleSelectCategory(cat.name)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-extrabold whitespace-nowrap transition cursor-pointer ${
                     isActive
                       ? 'bg-emerald-700 text-white shadow-xs'
@@ -805,7 +934,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
               );
             })}
             <button
-              onClick={() => setSelectedCategory('all')}
+              onClick={() => handleSelectCategory('all')}
               className={`px-3 py-1.5 rounded-lg text-xs font-extrabold whitespace-nowrap transition cursor-pointer ${
                 selectedCategory === 'all'
                   ? 'bg-teal-800 text-white shadow-xs'
@@ -836,7 +965,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
                   </p>
                 </div>
                 <button
-                  onClick={() => setSelectedCategory(null)}
+                  onClick={handleBackToCategories}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs transition inline-flex items-center gap-2 cursor-pointer"
                 >
                   <ArrowLeft className="h-4 w-4" /> अन्य पद / विषय श्रेणियां देखें
@@ -878,12 +1007,26 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
                           <span>{qCount} महत्वपूर्ण प्रश्न</span>
                           <span>{set.durationMinutes || 20} मिनट</span>
                         </div>
-                        <button
-                          onClick={() => handleStartSet(set)}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs group-hover:bg-emerald-700"
-                        >
-                          <Zap className="h-4 w-4 text-amber-300" /> प्रैक्टिस शुरू करें (Start Practice)
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleStartSet(set)}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs group-hover:bg-emerald-700"
+                          >
+                            <Zap className="h-4 w-4 text-amber-300" /> प्रैक्टिस शुरू करें (Start Practice)
+                          </button>
+                          <button
+                            onClick={() => setShareConfig({
+                              type: 'daily',
+                              date: set.date,
+                              subject: set.title,
+                              qCount: qCount
+                            })}
+                            title="डेली प्रैक्टिस शेयर करें"
+                            className="p-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl transition border border-emerald-200 cursor-pointer"
+                          >
+                            <Share2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -893,6 +1036,14 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
           </div>
         </div>
       )}
+
+      {/* Share Modal */}
+      <ShareModal 
+        isOpen={!!shareConfig}
+        onClose={() => setShareConfig(null)}
+        options={shareConfig || { type: 'daily' }}
+      />
+
     </div>
   );
 }

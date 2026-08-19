@@ -15,10 +15,14 @@ import {
   RotateCcw,
   Sparkles,
   Award,
-  Timer
+  Timer,
+  Share2
 } from 'lucide-react';
 import { Question, Quiz, Attempt } from '../types';
 import { isPyq, isSubjectTestQuestion } from '../utils/quizHelpers';
+import { RichTextRenderer } from './RichTextRenderer';
+import ShareModal from './ShareModal';
+import { ShareOptions } from '../utils/shareUtils';
 
 interface QuizRunnerProps {
   quiz: Quiz | null; // Null means dynamic custom quiz
@@ -34,6 +38,7 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
   const questionIds = quiz ? quiz.questionIds : (dynamicQuizData?.questionIds || []);
   const quizTitle = quiz ? quiz.title : (dynamicQuizData?.title || "Dynamic Quiz");
   const quizType = quiz ? quiz.type : (dynamicQuizData?.type || "pyq");
+  const [shareConfig, setShareConfig] = useState<ShareOptions | null>(null);
 
   const quizId = useMemo(() => {
     if (quiz) return quiz.id;
@@ -370,12 +375,29 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
               </p>
             </div>
             
-            <button 
-              onClick={() => { onAttemptSubmitted(); onClose(); }}
-              className="px-4 py-2.5 bg-gray-950 text-white text-xs font-bold rounded-xl hover:bg-amber-600 transition flex items-center gap-1.5 shadow"
-            >
-              <ArrowLeft className="h-4 w-4" /> Return to Home
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShareConfig({
+                  type: 'result',
+                  quizTitle: quizTitle,
+                  score: attemptResult.score,
+                  maxScore: questions.length * 2,
+                  percentage: ((attemptResult.score / (questions.length * 2)) * 100).toFixed(1),
+                  correct: attemptResult.correctCount,
+                  wrong: attemptResult.wrongCount
+                })}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow cursor-pointer"
+              >
+                <Share2 className="h-4 w-4" /> Share Scorecard
+              </button>
+
+              <button 
+                onClick={() => { onAttemptSubmitted(); onClose(); }}
+                className="px-4 py-2.5 bg-gray-950 text-white text-xs font-bold rounded-xl hover:bg-amber-600 transition flex items-center gap-1.5 shadow cursor-pointer"
+              >
+                <ArrowLeft className="h-4 w-4" /> Return to Home
+              </button>
+            </div>
           </div>
 
           {/* Scores Overview Matrix */}
@@ -497,9 +519,11 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
 
                   {/* Question content */}
                   <div className="space-y-2">
-                    <h3 className="text-sm sm:text-base font-bold text-gray-900 leading-relaxed font-sans whitespace-pre-line">
-                      {q.text_hi}
-                    </h3>
+                    <RichTextRenderer
+                      content={q.text_hi}
+                      as="h3"
+                      className="text-sm sm:text-base font-bold text-gray-900 leading-relaxed font-sans"
+                    />
                   </div>
 
                   {/* Options render with tags */}
@@ -529,9 +553,13 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
                           key={optIdx} 
                           className={`p-3 rounded-xl border text-xs flex justify-between items-center transition ${optBorderClass} ${optBgClass}`}
                         >
-                          <div>
-                            <span className="font-bold text-gray-500 mr-2 uppercase">{String.fromCharCode(65 + optIdx)}.</span>
-                            <span className="font-semibold text-gray-800 font-sans whitespace-pre-line">{displayOpt}</span>
+                          <div className="flex items-start gap-1.5 flex-1">
+                            <span className="font-bold text-gray-500 shrink-0 uppercase">{String.fromCharCode(65 + optIdx)}.</span>
+                            <RichTextRenderer
+                              content={displayOpt}
+                              as="span"
+                              className="font-semibold text-gray-800 font-sans flex-1"
+                            />
                           </div>
 
                           {labelBadge === 'correct' && (
@@ -555,9 +583,11 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
                       <p className="text-xs font-bold text-amber-900 border-b border-amber-100 pb-1 flex items-center gap-1 uppercase tracking-wider">
                         <HelpCircle className="h-4 w-4" /> Explanation & Reference Solution
                       </p>
-                      <p className="text-xs text-gray-700 leading-relaxed font-sans whitespace-pre-line">
-                        {q.explanation_hi}
-                      </p>
+                      <RichTextRenderer
+                        content={q.explanation_hi}
+                        as="div"
+                        className="text-xs text-gray-700 leading-relaxed font-sans"
+                      />
                     </div>
                   )}
                 </div>
@@ -565,16 +595,38 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
             })}
           </div>
 
-          {/* Back button at bottom */}
-          <div className="text-center pt-6">
+          {/* Action buttons at bottom */}
+          <div className="flex flex-wrap justify-center items-center gap-3 pt-6">
+            <button
+              onClick={() => setShareConfig({
+                type: 'result',
+                quizTitle: quizTitle,
+                score: attemptResult.score,
+                maxScore: questions.length * 2,
+                percentage: ((attemptResult.score / (questions.length * 2)) * 100).toFixed(1),
+                correct: attemptResult.correctCount,
+                wrong: attemptResult.wrongCount
+              })}
+              className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow transition duration-200 inline-flex items-center gap-2 cursor-pointer"
+            >
+              <Share2 className="h-4 w-4" /> Share Scorecard (स्कोरकार्ड शेयर करें)
+            </button>
+
             <button 
               onClick={() => { onAttemptSubmitted(); onClose(); }}
-              className="px-6 py-3 bg-gray-950 text-white hover:bg-amber-600 font-bold rounded-xl shadow transition duration-200 inline-flex items-center gap-1.5"
+              className="px-6 py-3 bg-gray-950 text-white hover:bg-amber-600 font-bold rounded-xl shadow transition duration-200 inline-flex items-center gap-1.5 cursor-pointer"
             >
               <RotateCcw className="h-4 w-4" /> Return to Home
             </button>
           </div>
         </div>
+
+        {/* Share Modal in Results screen */}
+        <ShareModal 
+          isOpen={!!shareConfig}
+          onClose={() => setShareConfig(null)}
+          options={shareConfig || { type: 'result', quizTitle }}
+        />
       </div>
     );
   }
@@ -646,9 +698,11 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
 
             {/* Question content */}
             <div className="space-y-3">
-              <p className="text-sm sm:text-base font-bold text-gray-900 leading-relaxed font-sans whitespace-pre-line">
-                {activeQuestion.text_hi}
-              </p>
+              <RichTextRenderer
+                content={activeQuestion.text_hi}
+                as="div"
+                className="text-sm sm:text-base font-bold text-gray-900 leading-relaxed font-sans"
+              />
             </div>
 
             {/* Option choices with immediate feedback if in practice mode */}
@@ -693,11 +747,11 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
 
                 return (
                   <div 
-                    key={optIdx}
+                    key={optIdx} 
                     onClick={() => handleSelectOption(optIdx)}
                     className={`p-4 rounded-xl border flex items-start justify-between cursor-pointer transition select-none ${optBorderClass} ${optBgClass}`}
                   >
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3 flex-1">
                       <div className="pt-0.5">
                         <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
                           isSelected 
@@ -710,9 +764,13 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
                         </div>
                       </div>
 
-                      <div className="text-xs sm:text-sm">
-                        <span className="font-bold text-gray-500 mr-2 uppercase">{String.fromCharCode(65 + optIdx)}.</span>
-                        <span className="font-semibold text-gray-800 font-sans whitespace-pre-line">{displayOpt}</span>
+                      <div className="text-xs sm:text-sm flex items-start gap-1.5 flex-1">
+                        <span className="font-bold text-gray-500 shrink-0 uppercase">{String.fromCharCode(65 + optIdx)}.</span>
+                        <RichTextRenderer
+                          content={displayOpt}
+                          as="span"
+                          className="font-semibold text-gray-800 font-sans flex-1"
+                        />
                       </div>
                     </div>
 
@@ -728,9 +786,11 @@ export default function QuizRunner({ quiz, dynamicQuizData, allQuestions, userId
                 <p className="text-xs font-bold text-amber-900 border-b border-amber-100 pb-1 flex items-center gap-1 uppercase tracking-wider">
                   <HelpCircle className="h-4 w-4" /> Explanation & Solution Key
                 </p>
-                <p className="text-xs text-gray-700 leading-relaxed font-sans whitespace-pre-line">
-                  {activeQuestion.explanation_hi}
-                </p>
+                <RichTextRenderer
+                  content={activeQuestion.explanation_hi}
+                  as="div"
+                  className="text-xs text-gray-700 leading-relaxed font-sans"
+                />
               </div>
             )}
 

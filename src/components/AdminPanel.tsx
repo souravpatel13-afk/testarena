@@ -60,6 +60,7 @@ import {
 import * as XLSX from 'xlsx';
 import { Question, ExamInfo, DailyPracticeSet, DailyPracticeQuestion, DailyPracticeCategory } from '../types';
 import { parseCorrectAnswer } from '../utils/quizHelpers';
+import { RichTextRenderer } from './RichTextRenderer';
 import { auth, googleSignIn, logout, getAccessToken, setAccessToken } from '../lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
@@ -131,7 +132,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [sheetPullingType, setSheetPullingType] = useState<'pyq' | 'subject' | 'currentAffairs' | null>(null);
 
   // Navigation tabs for Admin
-  const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'excel' | 'manual' | 'list' | 'currentAffairs' | 'aboutExam' | 'proofread' | 'dailyPractice'>('dailyPractice');
+  const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'excel' | 'manual' | 'list' | 'currentAffairs' | 'aboutExam' | 'proofread' | 'dailyPractice' | 'subjectWise' | 'pyq'>('dailyPractice');
   
   // Google Apps Script Webhook State
   const [googleAppsScriptUrl, setGoogleAppsScriptUrl] = useState<string>('');
@@ -139,6 +140,42 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [isAppsScriptModalOpen, setIsAppsScriptModalOpen] = useState(false);
   const [appsScriptSaving, setAppsScriptSaving] = useState(false);
   const [appsScriptSuccess, setAppsScriptSuccess] = useState<string | null>(null);
+
+  // Subject-Wise HTML Bulk & Manual Question States
+  const [subSubject, setSubSubject] = useState('छत्तीसगढ़ सामान्य ज्ञान');
+  const [subCustomSubject, setSubCustomSubject] = useState('');
+  const [subTopic, setSubTopic] = useState('सामान्य परिचय एवं इतिहास');
+  const [subInputMode, setSubInputMode] = useState<'bulkHtml' | 'manual'>('bulkHtml');
+  const [subBulkHtmlText, setSubBulkHtmlText] = useState<string>('');
+  const [subParsedQuestions, setSubParsedQuestions] = useState<Question[]>([]);
+  const [subSuccessMsg, setSubSuccessMsg] = useState<string | null>(null);
+  const [subErrorMsg, setSubErrorMsg] = useState<string | null>(null);
+  const [subSaving, setSubSaving] = useState(false);
+  const [subPreviewIndex, setSubPreviewIndex] = useState<number | null>(null);
+  const [subSingleTextHi, setSubSingleTextHi] = useState('');
+  const [subSingleTextEn, setSubSingleTextEn] = useState('');
+  const [subSingleOptionsHi, setSubSingleOptionsHi] = useState<string[]>(['', '', '', '']);
+  const [subSingleCorrectAnswer, setSubSingleCorrectAnswer] = useState<number>(0);
+  const [subSingleExplanationHi, setSubSingleExplanationHi] = useState('');
+
+  // PYQ HTML Bulk & Manual Question States
+  const [pyqExam, setPyqExam] = useState('CGPSC Prelims');
+  const [pyqCustomExam, setPyqCustomExam] = useState('');
+  const [pyqYear, setPyqYear] = useState<number>(2024);
+  const [pyqSubject, setPyqSubject] = useState('छत्तीसगढ़ सामान्य ज्ञान');
+  const [pyqTopic, setPyqTopic] = useState('विगत वर्ष प्रश्न');
+  const [pyqInputMode, setPyqInputMode] = useState<'bulkHtml' | 'manual'>('bulkHtml');
+  const [pyqBulkHtmlText, setPyqBulkHtmlText] = useState<string>('');
+  const [pyqParsedQuestions, setPyqParsedQuestions] = useState<Question[]>([]);
+  const [pyqSuccessMsg, setPyqSuccessMsg] = useState<string | null>(null);
+  const [pyqErrorMsg, setPyqErrorMsg] = useState<string | null>(null);
+  const [pyqSaving, setPyqSaving] = useState(false);
+  const [pyqPreviewIndex, setPyqPreviewIndex] = useState<number | null>(null);
+  const [pyqSingleTextHi, setPyqSingleTextHi] = useState('');
+  const [pyqSingleTextEn, setPyqSingleTextEn] = useState('');
+  const [pyqSingleOptionsHi, setPyqSingleOptionsHi] = useState<string[]>(['', '', '', '']);
+  const [pyqSingleCorrectAnswer, setPyqSingleCorrectAnswer] = useState<number>(0);
+  const [pyqSingleExplanationHi, setPyqSingleExplanationHi] = useState('');
 
   // Proofreading & Question Audit States
   const [auditType, setAuditType] = useState<'all' | 'pyq' | 'subject'>('all');
@@ -574,6 +611,497 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
       }
     } catch (err: any) {
       setDpErrorMsg("पार्सिंग त्रुटि: " + err.message);
+    }
+  };
+
+  // --- SUBJECT-WISE QUESTION HANDLERS ---
+  const handleLoadSubjectSampleHtml = () => {
+    const sampleHtml = `<div class="question-block">
+  <p><b>प्रश्न 1:</b> छत्तीसगढ़ राज्य का कुल भौगोलिक क्षेत्रफल कितना है?</p>
+  <div class="options">
+    <p>A. 1,35,192 वर्ग किमी</p>
+    <p>B. 1,45,210 वर्ग किमी</p>
+    <p>C. 1,28,340 वर्ग किमी</p>
+    <p>D. 1,52,000 वर्ग किमी</p>
+  </div>
+  <p class="answer">A</p>
+  <div class="explanation"><b>व्याख्या:</b> छत्तीसगढ़ का कुल क्षेत्रफल 1,35,192 वर्ग किमी है, जो भारत के कुल क्षेत्रफल का लगभग 4.11% है।</div>
+</div>
+
+<div class="question-block">
+  <p><b>प्रश्न 2:</b> 'मिनीमाता (हसदेव बांगो) बांध' छत्तीसगढ़ के किस जिले में स्थित है?</p>
+  <div class="options">
+    <p>A. बिलासपुर</p>
+    <p>B. कोरबा</p>
+    <p>C. जांजगीर-चांपा</p>
+    <p>D. रायगढ़</p>
+  </div>
+  <p class="answer">B</p>
+  <div class="explanation"><b>व्याख्या:</b> मिनीमाता (हसदेव बांगो) बांध कोरबा जिले में हसदेव नदी पर निर्मित है। यह छत्तीसगढ़ का सबसे ऊंचा बांध (87 मीटर) है।</div>
+</div>
+
+<div class="question-block">
+  <p><b>प्रश्न 3:</b> छत्तीसगढ़ की प्रसिद्ध 'गोंचा पर्व' किस माह में मनाया जाता है?</p>
+  <div class="options">
+    <p>A. चैत्र माह</p>
+    <p>B. आषाढ़ माह</p>
+    <p>C. सावन माह</p>
+    <p>D. क्वांर माह</p>
+  </div>
+  <p class="answer">B</p>
+  <div class="explanation"><b>व्याख्या:</b> बस्तर का गोंचा पर्व आषाढ़ शुक्ल द्वितीया (रथयात्रा) के अवसर पर आयोजित होता है। इसमें तुपकी का प्रयोग किया जाता है।</div>
+</div>`;
+    setSubBulkHtmlText(sampleHtml);
+    setSubSuccessMsg("नमूना विषयवार HTML कोड लोड कर दिया गया है।");
+  };
+
+  const handleParseSubjectBulkHtml = () => {
+    if (!subBulkHtmlText.trim()) {
+      setSubErrorMsg("कृपया पहले बॉक्स में HTML कोड दर्ज करें।");
+      return;
+    }
+    try {
+      const activeSub = subSubject === '__custom__' ? (subCustomSubject.trim() || 'छत्तीसगढ़ सामान्य ज्ञान') : subSubject;
+      const activeTop = subTopic.trim() || 'सामान्य ज्ञान';
+      
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(subBulkHtmlText, 'text/html');
+      const blocks = doc.querySelectorAll('.question-block, .dp-question, .question, .item, .q-card, .card, .ques');
+      
+      const cleanOption = (txt: string) => {
+        return txt
+          .replace(/^[\s(]*[A-Ea-e1-5क-ङ][\s).:\-–—]+/, '')
+          .replace(/^<b>\s*[A-Ea-e1-5क-ङ][\s).:\-–—]*<\/b>/i, '')
+          .trim();
+      };
+      const parseAns = (txt: string) => {
+        const t = txt.trim().toUpperCase();
+        if (t.includes('A') || t === '1' || t.includes('क')) return 0;
+        if (t.includes('B') || t === '2' || t.includes('ख')) return 1;
+        if (t.includes('C') || t === '3' || t.includes('ग')) return 2;
+        if (t.includes('D') || t === '4' || t.includes('घ')) return 3;
+        if (t.includes('E') || t === '5' || t.includes('ङ')) return 4;
+        return 0;
+      };
+
+      const parsed: Question[] = [];
+
+      if (blocks.length > 0) {
+        blocks.forEach((b, i) => {
+          const qEl = b.querySelector('.question-text, .q-text, h3, h4, b, p') || b;
+          const optEls = Array.from(b.querySelectorAll('.options p, .options li, .options div, .option, li, .opt'));
+          const ansEl = b.querySelector('.answer, .ans, .correct, .key, [data-answer]');
+          const expEl = b.querySelector('.explanation, .exp, .solution, .sol, .vyakhya');
+
+          let opts: string[] = [];
+          if (optEls.length >= 2) {
+            opts = optEls.map(el => cleanOption(el.innerHTML?.trim() || el.textContent || ''));
+          } else {
+            const rawText = b.textContent || '';
+            const m = rawText.match(/(?:[A-D][\.\)])\s*([^\n\r]+)/g);
+            if (m && m.length >= 2) opts = m.map(cleanOption);
+            else opts = ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"];
+          }
+
+          let ansIdx = 0;
+          if (ansEl) {
+            ansIdx = parseAns(ansEl.getAttribute('data-answer') || ansEl.textContent || '');
+          }
+
+          let qText = qEl.innerHTML ? qEl.innerHTML.replace(/^<b>\s*प्रश्न\s*\d+\s*[:\-–]?\s*<\/b>/i, '').replace(/^प्रश्न\s*\d+\s*[:\-–]?\s*/i, '').trim() : qEl.textContent || '';
+          if (!qText) qText = qEl.textContent || `प्रश्न ${i + 1}`;
+
+          const expText = expEl 
+            ? (expEl.innerHTML 
+                ? expEl.innerHTML.replace(/^<b>\s*व्याख्या\s*[:\-–]?\s*<\/b>/i, '').replace(/^व्याख्या\s*[:\-–]?\s*/i, '').trim() 
+                : expEl.textContent?.replace(/^व्याख्या\s*[:\-–]?\s*/i, '').trim() || '')
+            : '';
+
+          parsed.push({
+            id: `q-sub-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
+            text_hi: qText,
+            options_hi: opts.length >= 4 ? opts.slice(0, 5) : [...opts, "विकल्प C", "विकल्प D"].slice(0, 4),
+            correctAnswer: ansIdx,
+            subject: activeSub,
+            topic: activeTop,
+            exam: undefined,
+            year: undefined,
+            explanation_hi: expText || ''
+          });
+        });
+      } else {
+        // Line-by-line fallback
+        const lines = subBulkHtmlText.split(/(?:<div|\n\s*\n)/i).filter(x => x.trim().length > 15);
+        lines.forEach((item, i) => {
+          parsed.push({
+            id: `q-sub-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
+            text_hi: item.substring(0, 150),
+            options_hi: ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"],
+            correctAnswer: 0,
+            subject: activeSub,
+            topic: activeTop,
+            exam: undefined,
+            year: undefined,
+            explanation_hi: item
+          });
+        });
+      }
+
+      if (parsed.length > 0) {
+        setSubParsedQuestions(parsed);
+        setSubSuccessMsg(`सफलतापूर्वक ${parsed.length} विषयवार प्रश्न पार्स कर लिए गए हैं! नीचे समीक्षा करें और "डेटाबेस में सहेजें" पर क्लिक करें।`);
+        setSubErrorMsg(null);
+      } else {
+        setSubErrorMsg("एचटीएमएल पार्स नहीं हो सका। कृपया नमूना HTML प्रारूप का पालन करें।");
+      }
+    } catch (err: any) {
+      setSubErrorMsg("पार्सिंग त्रुटि: " + err.message);
+    }
+  };
+
+  const handleSaveSubjectQuestions = async (mode: 'append' | 'replace' = 'append') => {
+    if (subParsedQuestions.length === 0) {
+      setSubErrorMsg("सहेजने के लिए कोई प्रश्न नहीं हैं। कृपया पहले HTML पार्स करें।");
+      return;
+    }
+    setSubSaving(true);
+    setSubSuccessMsg(null);
+    setSubErrorMsg(null);
+    try {
+      const activeSub = subSubject === '__custom__' ? (subCustomSubject.trim() || 'छत्तीसगढ़ सामान्य ज्ञान') : subSubject;
+      const activeTop = subTopic.trim() || 'सामान्य ज्ञान';
+      
+      const payload = subParsedQuestions.map(q => ({
+        ...q,
+        subject: activeSub,
+        topic: activeTop,
+        exam: undefined,
+        year: undefined
+      }));
+
+      const endpoint = mode === 'replace' ? '/api/questions/replace' : '/api/questions/bulk';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setSubSuccessMsg(`सफलतापूर्वक ${payload.length} विषयवार प्रश्न डेटाबेस में सहेजे गए और तुरंत लाइव कर दिए गए!`);
+        setSubParsedQuestions([]);
+        setSubBulkHtmlText('');
+        if (onRefreshQuestions) onRefreshQuestions();
+      } else {
+        const errJson = await res.json();
+        setSubErrorMsg(errJson.error || "प्रश्न सहेजने में विफल।");
+      }
+    } catch (err: any) {
+      setSubErrorMsg("सर्वर त्रुटि: " + err.message);
+    } finally {
+      setSubSaving(false);
+    }
+  };
+
+  const handleSaveSingleSubjectQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subSingleTextHi.trim()) {
+      setSubErrorMsg("कृपया प्रश्न का विवरण दर्ज करें।");
+      return;
+    }
+    const validOpts = subSingleOptionsHi.filter(o => o.trim() !== '');
+    if (validOpts.length < 2) {
+      setSubErrorMsg("कम से कम 2 विकल्प दर्ज करना अनिवार्य है।");
+      return;
+    }
+
+    setSubSaving(true);
+    setSubSuccessMsg(null);
+    setSubErrorMsg(null);
+    try {
+      const activeSub = subSubject === '__custom__' ? (subCustomSubject.trim() || 'छत्तीसगढ़ सामान्य ज्ञान') : subSubject;
+      const activeTop = subTopic.trim() || 'सामान्य ज्ञान';
+
+      const newQ: Question = {
+        id: `q-sub-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        text_hi: subSingleTextHi.trim(),
+        text_en: subSingleTextEn.trim() || undefined,
+        options_hi: subSingleOptionsHi.map((o, idx) => o.trim() || `विकल्प ${String.fromCharCode(65 + idx)}`),
+        correctAnswer: subSingleCorrectAnswer,
+        subject: activeSub,
+        topic: activeTop,
+        explanation_hi: subSingleExplanationHi.trim() || undefined
+      };
+
+      const res = await fetch('/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newQ)
+      });
+
+      if (res.ok) {
+        setSubSuccessMsg("1 नया विषयवार प्रश्न सफलतापूर्वक डेटाबेस में जोड़ दिया गया!");
+        setSubSingleTextHi('');
+        setSubSingleTextEn('');
+        setSubSingleOptionsHi(['', '', '', '']);
+        setSubSingleExplanationHi('');
+        setSubSingleCorrectAnswer(0);
+        if (onRefreshQuestions) onRefreshQuestions();
+      } else {
+        const errJson = await res.json();
+        setSubErrorMsg(errJson.error || "प्रश्न जोड़ने में विफल।");
+      }
+    } catch (err: any) {
+      setSubErrorMsg("सर्वर त्रुटि: " + err.message);
+    } finally {
+      setSubSaving(false);
+    }
+  };
+
+  // --- PYQ (PREVIOUS YEAR QUESTIONS) HANDLERS ---
+  const handleLoadPyqSampleHtml = () => {
+    const sampleHtml = `<div class="question-block">
+  <p><b>प्रश्न 1:</b> प्राचीन काल में छत्तीसगढ़ क्षेत्र को किस नाम से जाना जाता था? <span class="badge">[CGPSC Prelims 2021]</span></p>
+  <div class="options">
+    <p>A. उत्तर कोशल</p>
+    <p>B. दक्षिण कोशल</p>
+    <p>C. महाकांतार</p>
+    <p>D. चेदि देश</p>
+  </div>
+  <p class="answer">B</p>
+  <div class="explanation"><b>व्याख्या:</b> रामायण कालीन एवं प्राचीन साहित्यों में छत्तीसगढ़ क्षेत्र को 'दक्षिण कोशल' कहा गया है जिसकी राजधानी कुशावती थी।</div>
+</div>
+
+<div class="question-block">
+  <p><b>प्रश्न 2:</b> छत्तीसगढ़ के प्रसिद्ध 'बस्तर दशहरा' में किस देवी की पूजा मुख्य रूप से की जाती है? <span class="badge">[CG Vyapam 2023]</span></p>
+  <div class="options">
+    <p>A. मां बम्लेश्वरी</p>
+    <p>B. मां दंतेश्वरी</p>
+    <p>C. महामाया देवी</p>
+    <p>D. मां चंद्रहासिनी</p>
+  </div>
+  <p class="answer">B</p>
+  <div class="explanation"><b>व्याख्या:</b> बस्तर का दशहरा 75 दिनों तक चलने वाला विश्व प्रसिद्ध पर्व है, जो मां दंतेश्वरी देवी को समर्पित है।</div>
+</div>
+
+<div class="question-block">
+  <p><b>प्रश्न 3:</b> छत्तीसगढ़ की प्रथम महिला सांसद कौन थीं? <span class="badge">[CGPSC 2019]</span></p>
+  <div class="options">
+    <p>A. मिनीमाता (मीनाक्षी देवी)</p>
+    <p>B. पद्मावती देवी</p>
+    <p>C. करुणा शुक्ला</p>
+    <p>D. रेणुका सिंह</p>
+  </div>
+  <p class="answer">A</p>
+  <div class="explanation"><b>व्याख्या:</b> मिनीमाता छत्तीसगढ़ की प्रथम महिला सांसद (लोकसभा सदस्य) थीं। वे सारंगढ़ और जांजगीर क्षेत्र से चुनी गई थीं।</div>
+</div>`;
+    setPyqBulkHtmlText(sampleHtml);
+    setPyqSuccessMsg("नमूना PYQ HTML कोड लोड कर दिया गया है।");
+  };
+
+  const handleParsePyqBulkHtml = () => {
+    if (!pyqBulkHtmlText.trim()) {
+      setPyqErrorMsg("कृपया पहले बॉक्स में HTML कोड दर्ज करें।");
+      return;
+    }
+    try {
+      const activeExam = pyqExam === '__custom__' ? (pyqCustomExam.trim() || 'CGPSC Prelims') : pyqExam;
+      const activeSub = pyqSubject.trim() || 'छत्तीसगढ़ सामान्य ज्ञान';
+      const activeTop = pyqTopic.trim() || 'विगत वर्ष प्रश्न';
+      
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(pyqBulkHtmlText, 'text/html');
+      const blocks = doc.querySelectorAll('.question-block, .dp-question, .question, .item, .q-card, .card, .ques');
+      
+      const cleanOption = (txt: string) => {
+        return txt
+          .replace(/^[\s(]*[A-Ea-e1-5क-ङ][\s).:\-–—]+/, '')
+          .replace(/^<b>\s*[A-Ea-e1-5क-ङ][\s).:\-–—]*<\/b>/i, '')
+          .trim();
+      };
+      const parseAns = (txt: string) => {
+        const t = txt.trim().toUpperCase();
+        if (t.includes('A') || t === '1' || t.includes('क')) return 0;
+        if (t.includes('B') || t === '2' || t.includes('ख')) return 1;
+        if (t.includes('C') || t === '3' || t.includes('ग')) return 2;
+        if (t.includes('D') || t === '4' || t.includes('घ')) return 3;
+        if (t.includes('E') || t === '5' || t.includes('ङ')) return 4;
+        return 0;
+      };
+
+      const parsed: Question[] = [];
+
+      if (blocks.length > 0) {
+        blocks.forEach((b, i) => {
+          const qEl = b.querySelector('.question-text, .q-text, h3, h4, b, p') || b;
+          const optEls = Array.from(b.querySelectorAll('.options p, .options li, .options div, .option, li, .opt'));
+          const ansEl = b.querySelector('.answer, .ans, .correct, .key, [data-answer]');
+          const expEl = b.querySelector('.explanation, .exp, .solution, .sol, .vyakhya');
+
+          let opts: string[] = [];
+          if (optEls.length >= 2) {
+            opts = optEls.map(el => cleanOption(el.innerHTML?.trim() || el.textContent || ''));
+          } else {
+            const rawText = b.textContent || '';
+            const m = rawText.match(/(?:[A-D][\.\)])\s*([^\n\r]+)/g);
+            if (m && m.length >= 2) opts = m.map(cleanOption);
+            else opts = ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"];
+          }
+
+          let ansIdx = 0;
+          if (ansEl) {
+            ansIdx = parseAns(ansEl.getAttribute('data-answer') || ansEl.textContent || '');
+          }
+
+          let qText = qEl.innerHTML ? qEl.innerHTML.replace(/^<b>\s*प्रश्न\s*\d+\s*[:\-–]?\s*<\/b>/i, '').replace(/^प्रश्न\s*\d+\s*[:\-–]?\s*/i, '').trim() : qEl.textContent || '';
+          if (!qText) qText = qEl.textContent || `प्रश्न ${i + 1}`;
+
+          const expText = expEl 
+            ? (expEl.innerHTML 
+                ? expEl.innerHTML.replace(/^<b>\s*व्याख्या\s*[:\-–]?\s*<\/b>/i, '').replace(/^व्याख्या\s*[:\-–]?\s*/i, '').trim() 
+                : expEl.textContent?.replace(/^व्याख्या\s*[:\-–]?\s*/i, '').trim() || '')
+            : '';
+
+          parsed.push({
+            id: `q-pyq-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
+            text_hi: qText,
+            options_hi: opts.length >= 4 ? opts.slice(0, 5) : [...opts, "विकल्प C", "विकल्प D"].slice(0, 4),
+            correctAnswer: ansIdx,
+            subject: activeSub,
+            topic: activeTop,
+            exam: activeExam,
+            year: pyqYear || undefined,
+            explanation_hi: expText || ''
+          });
+        });
+      } else {
+        // Line-by-line fallback
+        const lines = pyqBulkHtmlText.split(/(?:<div|\n\s*\n)/i).filter(x => x.trim().length > 15);
+        lines.forEach((item, i) => {
+          parsed.push({
+            id: `q-pyq-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
+            text_hi: item.substring(0, 150),
+            options_hi: ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"],
+            correctAnswer: 0,
+            subject: activeSub,
+            topic: activeTop,
+            exam: activeExam,
+            year: pyqYear || undefined,
+            explanation_hi: item
+          });
+        });
+      }
+
+      if (parsed.length > 0) {
+        setPyqParsedQuestions(parsed);
+        setPyqSuccessMsg(`सफलतापूर्वक ${parsed.length} विगत वर्ष के प्रश्न (PYQ) पार्स कर लिए गए हैं! नीचे समीक्षा करें और "डेटाबेस में सहेजें" पर क्लिक करें।`);
+        setPyqErrorMsg(null);
+      } else {
+        setPyqErrorMsg("एचटीएमएल पार्स नहीं हो सका। कृपया नमूना HTML प्रारूप का पालन करें।");
+      }
+    } catch (err: any) {
+      setPyqErrorMsg("पार्सिंग त्रुटि: " + err.message);
+    }
+  };
+
+  const handleSavePyqQuestions = async (mode: 'append' | 'replace' = 'append') => {
+    if (pyqParsedQuestions.length === 0) {
+      setPyqErrorMsg("सहेजने के लिए कोई प्रश्न नहीं हैं। कृपया पहले HTML पार्स करें।");
+      return;
+    }
+    setPyqSaving(true);
+    setPyqSuccessMsg(null);
+    setPyqErrorMsg(null);
+    try {
+      const activeExam = pyqExam === '__custom__' ? (pyqCustomExam.trim() || 'CGPSC Prelims') : pyqExam;
+      const activeSub = pyqSubject.trim() || 'छत्तीसगढ़ सामान्य ज्ञान';
+      const activeTop = pyqTopic.trim() || 'विगत वर्ष प्रश्न';
+      
+      const payload = pyqParsedQuestions.map(q => ({
+        ...q,
+        exam: activeExam,
+        year: pyqYear || undefined,
+        subject: activeSub,
+        topic: activeTop
+      }));
+
+      const endpoint = mode === 'replace' ? '/api/questions/replace' : '/api/questions/bulk';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setPyqSuccessMsg(`सफलतापूर्वक ${payload.length} विगत वर्ष के प्रश्न (PYQ) डेटाबेस में सहेजे गए और तुरंत लाइव कर दिए गए!`);
+        setPyqParsedQuestions([]);
+        setPyqBulkHtmlText('');
+        if (onRefreshQuestions) onRefreshQuestions();
+      } else {
+        const errJson = await res.json();
+        setPyqErrorMsg(errJson.error || "PYQ प्रश्न सहेजने में विफल।");
+      }
+    } catch (err: any) {
+      setPyqErrorMsg("सर्वर त्रुटि: " + err.message);
+    } finally {
+      setPyqSaving(false);
+    }
+  };
+
+  const handleSaveSinglePyqQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pyqSingleTextHi.trim()) {
+      setPyqErrorMsg("कृपया प्रश्न का विवरण दर्ज करें।");
+      return;
+    }
+    const validOpts = pyqSingleOptionsHi.filter(o => o.trim() !== '');
+    if (validOpts.length < 2) {
+      setPyqErrorMsg("कम से कम 2 विकल्प दर्ज करना अनिवार्य है।");
+      return;
+    }
+
+    setPyqSaving(true);
+    setPyqSuccessMsg(null);
+    setPyqErrorMsg(null);
+    try {
+      const activeExam = pyqExam === '__custom__' ? (pyqCustomExam.trim() || 'CGPSC Prelims') : pyqExam;
+      const activeSub = pyqSubject.trim() || 'छत्तीसगढ़ सामान्य ज्ञान';
+      const activeTop = pyqTopic.trim() || 'विगत वर्ष प्रश्न';
+
+      const newQ: Question = {
+        id: `q-pyq-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        text_hi: pyqSingleTextHi.trim(),
+        text_en: pyqSingleTextEn.trim() || undefined,
+        options_hi: pyqSingleOptionsHi.map((o, idx) => o.trim() || `विकल्प ${String.fromCharCode(65 + idx)}`),
+        correctAnswer: pyqSingleCorrectAnswer,
+        exam: activeExam,
+        year: pyqYear || undefined,
+        subject: activeSub,
+        topic: activeTop,
+        explanation_hi: pyqSingleExplanationHi.trim() || undefined
+      };
+
+      const res = await fetch('/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newQ)
+      });
+
+      if (res.ok) {
+        setPyqSuccessMsg("1 नया विगत वर्ष प्रश्न (PYQ) सफलतापूर्वक डेटाबेस में जोड़ दिया गया!");
+        setPyqSingleTextHi('');
+        setPyqSingleTextEn('');
+        setPyqSingleOptionsHi(['', '', '', '']);
+        setPyqSingleExplanationHi('');
+        setPyqSingleCorrectAnswer(0);
+        if (onRefreshQuestions) onRefreshQuestions();
+      } else {
+        const errJson = await res.json();
+        setPyqErrorMsg(errJson.error || "PYQ प्रश्न जोड़ने में विफल।");
+      }
+    } catch (err: any) {
+      setPyqErrorMsg("सर्वर त्रुटि: " + err.message);
+    } finally {
+      setPyqSaving(false);
     }
   };
 
@@ -1857,47 +2385,98 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
       <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 pb-3">
         <button
           onClick={() => setActiveSubTab('dailyPractice')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+          className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
             activeSubTab === 'dailyPractice'
               ? 'bg-emerald-700 text-white shadow-md ring-2 ring-emerald-300'
               : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100 border border-emerald-200'
           }`}
         >
           <Sparkles className="h-4 w-4 text-amber-500 animate-bounce" />
-          ⚡ सहायक शिक्षक भर्ती परीक्षा डेली प्रैक्टिस प्रबंधन
+          ⚡ सहायक शिक्षक डेली प्रैक्टिस
         </button>
 
         <button
-          onClick={() => setActiveSubTab('sheets')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
-            activeSubTab === 'sheets'
-              ? 'bg-emerald-800 text-white shadow-sm'
-              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+          onClick={() => setActiveSubTab('subjectWise')}
+          className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'subjectWise'
+              ? 'bg-teal-700 text-white shadow-md ring-2 ring-teal-300'
+              : 'bg-white text-gray-700 hover:bg-teal-50 border border-gray-200'
           }`}
         >
-          <Database className="h-4 w-4" /> गूगल शीट सिंक
+          <BookOpen className="h-4 w-4 text-teal-600" />
+          📚 विषय-वार प्रश्न (HTML बल्क + फॉर्म)
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('pyq')}
+          className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'pyq'
+              ? 'bg-indigo-700 text-white shadow-md ring-2 ring-indigo-300'
+              : 'bg-white text-gray-700 hover:bg-indigo-50 border border-gray-200'
+          }`}
+        >
+          <Database className="h-4 w-4 text-indigo-600" />
+          🏛️ विगत वर्ष प्रश्न / PYQ (HTML बल्क + फॉर्म)
         </button>
 
         <button
           onClick={() => setActiveSubTab('list')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+          className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
             activeSubTab === 'list'
               ? 'bg-emerald-800 text-white shadow-sm'
               : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
           }`}
         >
-          <Search className="h-4 w-4" /> प्रश्न सूची ({questions.length})
+          <Search className="h-4 w-4 text-gray-500" />
+          📋 प्रश्न बैंक सूची ({questions.length})
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('proofread')}
+          className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'proofread'
+              ? 'bg-amber-800 text-white shadow-sm'
+              : 'bg-white text-gray-700 hover:bg-amber-50 border border-gray-200'
+          }`}
+        >
+          <Wand2 className="h-4 w-4 text-amber-600" />
+          🔍 त्रुटि सुधार व ऑडिट
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('excel')}
+          className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'excel'
+              ? 'bg-emerald-800 text-white shadow-sm'
+              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+          📊 एक्सेल / CSV अपलोड
         </button>
 
         <button
           onClick={() => setActiveSubTab('aboutExam')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+          className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
             activeSubTab === 'aboutExam'
               ? 'bg-emerald-800 text-white shadow-sm'
               : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
           }`}
         >
-          <GraduationCap className="h-4 w-4" /> परीक्षा जानकारी (Word सम्पादक)
+          <GraduationCap className="h-4 w-4 text-purple-600" />
+          🎓 परीक्षा जानकारी (Word सम्पादक)
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('sheets')}
+          className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'sheets'
+              ? 'bg-emerald-800 text-white shadow-sm'
+              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <RefreshCw className="h-4 w-4 text-blue-600" />
+          🔄 गूगल शीट सिंक
         </button>
       </div>
 
@@ -2662,6 +3241,819 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                   </div>
                 </div>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* SUBJECT-WISE QUESTION MANAGEMENT TAB */}
+        {activeSubTab === 'subjectWise' && (
+          <div className="space-y-6 animate-fadeIn">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-teal-800 via-emerald-800 to-teal-950 text-white p-6 rounded-3xl shadow-md border border-teal-700/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-2 bg-teal-500/20 text-teal-200 border border-teal-400/30 px-3 py-0.5 rounded-full text-[11px] font-bold">
+                  <BookOpen className="h-3.5 w-3.5 text-teal-300" /> Subject-Wise Question Bank & Bulk HTML Importer
+                </div>
+                <h2 className="text-xl font-extrabold text-white">
+                  📚 विषय-वार प्रश्न प्रबंधन (Subject-Wise Questions)
+                </h2>
+                <p className="text-xs text-teal-100/90 max-w-2xl font-medium leading-relaxed">
+                  यहाँ से आप किसी भी विषय (जैसे छत्तीसगढ़ सामान्य ज्ञान, संविधान, इतिहास, भूगोल आदि) के प्रश्नों को <strong>बल्क में HTML कोड</strong> या <strong>सिंगल प्रश्न फॉर्म</strong> के माध्यम से सीधे डेटाबेस में जोड़ सकते हैं।
+                </p>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-xs border border-white/20 px-4 py-3 rounded-2xl text-center self-stretch md:self-auto min-w-[150px]">
+                <span className="text-[11px] font-bold text-teal-200 block uppercase tracking-wider">कुल विषयवार प्रश्न</span>
+                <span className="text-2xl font-black text-white">
+                  {questions.filter(q => !q.exam || q.exam.trim() === '').length}
+                </span>
+                <span className="text-[10px] text-teal-200/80 block mt-0.5">डेटाबेस में सुरक्षित</span>
+              </div>
+            </div>
+
+            {/* Notifications */}
+            {subSuccessMsg && (
+              <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between gap-3 text-emerald-900 text-xs font-bold shadow-xs">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
+                  <span>{subSuccessMsg}</span>
+                </div>
+                <button onClick={() => setSubSuccessMsg(null)} className="text-emerald-700 hover:text-emerald-900 text-xs font-black cursor-pointer">✕</button>
+              </div>
+            )}
+
+            {subErrorMsg && (
+              <div className="p-4 bg-red-50 border border-red-300 rounded-2xl flex items-center justify-between gap-3 text-red-900 text-xs font-bold shadow-xs">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+                  <span>{subErrorMsg}</span>
+                </div>
+                <button onClick={() => setSubErrorMsg(null)} className="text-red-700 hover:text-red-900 text-xs font-black cursor-pointer">✕</button>
+              </div>
+            )}
+
+            {/* Settings & Mode Switcher */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Subject Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5">
+                    <BookOpen className="h-4 w-4 text-teal-600" />
+                    विषय चुनें (Select Subject)*
+                  </label>
+                  <select
+                    value={subSubject}
+                    onChange={(e) => setSubSubject(e.target.value)}
+                    className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                  >
+                    <option value="छत्तीसगढ़ सामान्य ज्ञान">छत्तीसगढ़ सामान्य ज्ञान (Chhattisgarh GK)</option>
+                    <option value="भारतीय संविधान एवं राजव्यवस्था">भारतीय संविधान एवं राजव्यवस्था (Indian Polity)</option>
+                    <option value="भारतीय इतिहास">भारतीय इतिहास (Indian History)</option>
+                    <option value="भूगोल (भारत एवं छत्तीसगढ़)">भूगोल - भारत एवं छत्तीसगढ़ (Geography)</option>
+                    <option value="भारतीय अर्थव्यवस्था">भारतीय अर्थव्यवस्था (Indian Economy)</option>
+                    <option value="सामान्य विज्ञान एवं प्रौद्योगिकी">सामान्य विज्ञान एवं प्रौद्योगिकी (General Science)</option>
+                    <option value="भाषा - हिन्दी व छत्तीसगढ़ी">भाषा - हिन्दी व छत्तीसगढ़ी (Language Hindi/CG)</option>
+                    <option value="गणित एवं मानसिक योग्यता">गणित एवं मानसिक योग्यता (Maths & CSAT)</option>
+                    <option value="कंप्यूटर सामान्य ज्ञान">कंप्यूटर सामान्य ज्ञान (Computer GK)</option>
+                    <option value="पर्यावरण एवं पारिस्थितिकी">पर्यावरण एवं पारिस्थितिकी (Environment)</option>
+                    <option value="बाल विकास एवं शिक्षाशास्त्र">बाल विकास एवं शिक्षाशास्त्र (CDP / Pedagogy)</option>
+                    <option value="__custom__">➕ अन्य नया विषय दर्ज करें (Custom Subject)...</option>
+                  </select>
+
+                  {subSubject === '__custom__' && (
+                    <input
+                      type="text"
+                      placeholder="नया विषय का नाम लिखें (उदा. कृषि विज्ञान)"
+                      value={subCustomSubject}
+                      onChange={(e) => setSubCustomSubject(e.target.value)}
+                      className="w-full mt-2 p-2.5 text-xs font-bold bg-white border border-teal-400 rounded-xl focus:ring-2 focus:ring-teal-500"
+                    />
+                  )}
+                </div>
+
+                {/* Topic Input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5">
+                    <Layers className="h-4 w-4 text-teal-600" />
+                    अध्याय / टॉपिक का नाम (Topic Name)*
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="उदा. छत्तीसगढ़ की जनजातियां / मौलिक अधिकार / सिंधु सभ्यता"
+                    value={subTopic}
+                    onChange={(e) => setSubTopic(e.target.value)}
+                    className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                  />
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {["सामान्य परिचय", "इतिहास व संस्कृति", "प्रशासनिक ढांचा", "भौगोलिक परिदृश्य", "प्रमुख तथ्य"].map(tag => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => setSubTopic(tag)}
+                        className="text-[10px] bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-md hover:bg-teal-100 cursor-pointer font-semibold"
+                      >
+                        +{tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Mode Toggle Buttons */}
+              <div className="flex items-center justify-between border-t border-gray-100 pt-3 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-600">प्रश्न इनपुट मोड:</span>
+                  <button
+                    type="button"
+                    onClick={() => setSubInputMode('bulkHtml')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                      subInputMode === 'bulkHtml'
+                        ? 'bg-teal-700 text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Code2 className="h-4 w-4" />
+                    ⚡ बल्क HTML कोड पार्सर (HTML Parser)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSubInputMode('manual')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                      subInputMode === 'manual'
+                        ? 'bg-teal-700 text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    📝 सिंगल प्रश्न फॉर्म (Manual Form)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* BULK HTML PARSER SECTION */}
+            {subInputMode === 'bulkHtml' && (
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-gray-100">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                      <Code2 className="h-4 w-4 text-teal-600" />
+                      HTML कोड बॉक्स में प्रश्न पेस्ट करें (Paste Questions HTML)
+                    </h3>
+                    <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                      आप किसी भी वर्ड/वेबसाइट से फॉर्मेट किया हुआ HTML कोड यहाँ पेस्ट करके एक क्लिक में पार्स कर सकते हैं।
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleLoadSubjectSampleHtml}
+                      className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                      नमूना HTML कोड लोड करें
+                    </button>
+                    {subBulkHtmlText && (
+                      <button
+                        type="button"
+                        onClick={() => { setSubBulkHtmlText(''); setSubParsedQuestions([]); }}
+                        className="text-xs font-bold text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
+                      >
+                        साफ करें
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <textarea
+                    rows={9}
+                    value={subBulkHtmlText}
+                    onChange={(e) => setSubBulkHtmlText(e.target.value)}
+                    placeholder={`यहाँ HTML कोड पेस्ट करें, उदाहरण:\n<div class="question-block">\n  <p><b>प्रश्न 1:</b> छत्तीसगढ़ राज्य का गठन कब हुआ था?</p>\n  <div class="options">\n    <p>A. 1 नवंबर 2000</p>\n    <p>B. 1 दिसंबर 2000</p>\n    <p>C. 9 नवंबर 2000</p>\n    <p>D. 15 नवंबर 2000</p>\n  </div>\n  <p class="answer">A</p>\n  <div class="explanation"><b>व्याख्या:</b> छत्तीसगढ़ 1 नवंबर 2000 को भारत का 26वां राज्य बना।</div>\n</div>`}
+                    className="w-full p-3.5 text-xs font-mono bg-slate-900 text-teal-300 rounded-xl border border-slate-700 focus:ring-2 focus:ring-teal-500 focus:outline-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleParseSubjectBulkHtml}
+                    className="w-full sm:w-auto px-6 py-3 rounded-xl text-xs font-extrabold text-white bg-teal-700 hover:bg-teal-800 transition flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                  >
+                    <Wand2 className="h-4 w-4 text-amber-300" />
+                    ⚡ HTML कोड पार्स करें व पूर्वावलोकन देखें (Parse & Preview)
+                  </button>
+
+                  {subParsedQuestions.length > 0 && (
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        disabled={subSaving}
+                        onClick={() => handleSaveSubjectQuestions('append')}
+                        className="flex-1 sm:flex-none px-6 py-3 rounded-xl text-xs font-extrabold text-white bg-emerald-700 hover:bg-emerald-800 transition flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                      >
+                        <Save className="h-4 w-4" />
+                        {subSaving ? "सहेजा जा रहा है..." : `💾 ${subParsedQuestions.length} प्रश्न बैंक में सुरक्षित करें (Save)`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* PARSED PREVIEW ACCORDION */}
+                {subParsedQuestions.length > 0 && (
+                  <div className="mt-6 space-y-3 pt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-between bg-teal-50 p-3.5 rounded-xl border border-teal-200">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-5 w-5 text-teal-700" />
+                        <span className="text-xs font-extrabold text-teal-900">
+                          पार्स किए गए प्रश्न ({subParsedQuestions.length}) — लाइव पूर्वावलोकन
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-teal-700 font-bold">
+                        विषय: {subSubject === '__custom__' ? subCustomSubject : subSubject} | टॉपिक: {subTopic || "सामान्य"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                      {subParsedQuestions.map((q, idx) => (
+                        <div
+                          key={q.id || idx}
+                          className="bg-white rounded-xl border border-gray-200 p-4 shadow-xs hover:border-teal-300 transition"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-2.5 flex-1">
+                              <span className="shrink-0 w-6 h-6 rounded-lg bg-teal-100 text-teal-900 text-xs font-black flex items-center justify-center">
+                                {idx + 1}
+                              </span>
+                              <div className="space-y-2 flex-1">
+                                <RichTextRenderer
+                                  content={q.text_hi}
+                                  as="div"
+                                  className="text-xs font-bold text-gray-900"
+                                />
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                  {q.options_hi.map((opt, optIdx) => (
+                                    <div
+                                      key={optIdx}
+                                      className={`p-2 rounded-lg text-xs font-medium border flex items-start gap-2 ${
+                                        q.correctAnswer === optIdx
+                                          ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold'
+                                          : 'bg-gray-50 border-gray-200 text-gray-700'
+                                      }`}
+                                    >
+                                      <span className={`w-4 h-4 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5 ${
+                                        q.correctAnswer === optIdx
+                                          ? 'bg-emerald-600 text-white'
+                                          : 'bg-gray-200 text-gray-600'
+                                      }`}>
+                                        {String.fromCharCode(65 + optIdx)}
+                                      </span>
+                                      <RichTextRenderer content={opt} as="span" className="flex-1" />
+                                      {q.correctAnswer === optIdx && (
+                                        <Check className="h-3.5 w-3.5 text-emerald-600 ml-auto shrink-0 mt-0.5" />
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {q.explanation_hi && (
+                                  <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-2.5 text-[11px] text-amber-900 font-medium">
+                                    <span className="font-bold text-amber-950 block mb-1">व्याख्या: </span>
+                                    <RichTextRenderer content={q.explanation_hi} as="div" />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setSubParsedQuestions(subParsedQuestions.filter((_, i) => i !== idx))}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                              title="हटाएं"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* MANUAL SINGLE QUESTION FORM */}
+            {subInputMode === 'manual' && (
+              <form onSubmit={handleSaveSingleSubjectQuestion} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs space-y-4">
+                <div className="pb-2 border-b border-gray-100">
+                  <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                    <PlusCircle className="h-4 w-4 text-teal-600" />
+                    सिंगल प्रश्न जोड़ें (Add Single Question)
+                  </h3>
+                  <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                    विषय: <strong>{subSubject === '__custom__' ? subCustomSubject : subSubject}</strong> | टॉपिक: <strong>{subTopic || "सामान्य"}</strong>
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700 block">प्रश्न (हिन्दी में)*</label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={subSingleTextHi}
+                    onChange={(e) => setSubSingleTextHi(e.target.value)}
+                    placeholder="प्रश्न का संपूर्ण विवरण यहाँ लिखें..."
+                    className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {subSingleOptionsHi.map((opt, optIdx) => (
+                    <div key={optIdx} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-gray-700">
+                          विकल्प {String.fromCharCode(65 + optIdx)}*
+                        </label>
+                        <label className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="subCorrectAnswer"
+                            checked={subSingleCorrectAnswer === optIdx}
+                            onChange={() => setSubSingleCorrectAnswer(optIdx)}
+                            className="text-teal-600 focus:ring-teal-500"
+                          />
+                          सही उत्तर (Correct)
+                        </label>
+                      </div>
+                      <input
+                        type="text"
+                        required={optIdx < 2}
+                        value={opt}
+                        onChange={(e) => {
+                          const updated = [...subSingleOptionsHi];
+                          updated[optIdx] = e.target.value;
+                          setSubSingleOptionsHi(updated);
+                        }}
+                        placeholder={`विकल्प ${String.fromCharCode(65 + optIdx)} का टेक्स्ट`}
+                        className={`w-full p-2.5 text-xs font-bold rounded-xl border focus:ring-2 focus:ring-teal-500 ${
+                          subSingleCorrectAnswer === optIdx
+                            ? 'bg-emerald-50 border-emerald-300'
+                            : 'bg-gray-50 border-gray-300'
+                        }`}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700 block">विस्तृत व्याख्या / समाधान (Explanation)</label>
+                  <textarea
+                    rows={2}
+                    value={subSingleExplanationHi}
+                    onChange={(e) => setSubSingleExplanationHi(e.target.value)}
+                    placeholder="प्रश्न के सही उत्तर का संक्षिप्त विवरण एवं संदर्भ..."
+                    className="w-full p-2.5 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={subSaving}
+                    className="px-6 py-2.5 rounded-xl text-xs font-extrabold text-white bg-teal-700 hover:bg-teal-800 transition flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                  >
+                    <Save className="h-4 w-4" />
+                    {subSaving ? "सहेजा जा रहा है..." : "डेटाबेस में प्रश्न सुरक्षित करें (Save Question)"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* PYQ (PREVIOUS YEAR QUESTIONS) MANAGEMENT TAB */}
+        {activeSubTab === 'pyq' && (
+          <div className="space-y-6 animate-fadeIn">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-indigo-900 via-blue-900 to-slate-950 text-white p-6 rounded-3xl shadow-md border border-indigo-700/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-2 bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 px-3 py-0.5 rounded-full text-[11px] font-bold">
+                  <Database className="h-3.5 w-3.5 text-indigo-300" /> PYQs Bank & Bulk HTML Importer
+                </div>
+                <h2 className="text-xl font-extrabold text-white">
+                  🏛️ विगत वर्ष प्रश्न प्रबंधन (Previous Year Questions)
+                </h2>
+                <p className="text-xs text-indigo-100/90 max-w-2xl font-medium leading-relaxed">
+                  विभिन्न प्रतियोगी परीक्षाओं (<strong>CGPSC Prelims, CG Vyapam छात्रावास अधीक्षक, CG TET, RI, पटवारी</strong> आदि) के पूर्व वर्षों के प्रश्न <strong>HTML कोड</strong> या <strong>फॉर्म</strong> से डेटाबेस में जोड़ें।
+                </p>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-xs border border-white/20 px-4 py-3 rounded-2xl text-center self-stretch md:self-auto min-w-[150px]">
+                <span className="text-[11px] font-bold text-indigo-200 block uppercase tracking-wider">कुल PYQ प्रश्न</span>
+                <span className="text-2xl font-black text-white">
+                  {questions.filter(q => q.exam && q.exam.trim() !== '').length}
+                </span>
+                <span className="text-[10px] text-indigo-200/80 block mt-0.5">डेटाबेस में सुरक्षित</span>
+              </div>
+            </div>
+
+            {/* Notifications */}
+            {pyqSuccessMsg && (
+              <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between gap-3 text-emerald-900 text-xs font-bold shadow-xs">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
+                  <span>{pyqSuccessMsg}</span>
+                </div>
+                <button onClick={() => setPyqSuccessMsg(null)} className="text-emerald-700 hover:text-emerald-900 text-xs font-black cursor-pointer">✕</button>
+              </div>
+            )}
+
+            {pyqErrorMsg && (
+              <div className="p-4 bg-red-50 border border-red-300 rounded-2xl flex items-center justify-between gap-3 text-red-900 text-xs font-bold shadow-xs">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+                  <span>{pyqErrorMsg}</span>
+                </div>
+                <button onClick={() => setPyqErrorMsg(null)} className="text-red-700 hover:text-red-900 text-xs font-black cursor-pointer">✕</button>
+              </div>
+            )}
+
+            {/* Settings & Mode Switcher */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Exam Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5">
+                    <GraduationCap className="h-4 w-4 text-indigo-600" />
+                    परीक्षा का नाम (Exam)*
+                  </label>
+                  <select
+                    value={pyqExam}
+                    onChange={(e) => setPyqExam(e.target.value)}
+                    className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  >
+                    <option value="CGPSC Prelims">CGPSC Prelims (राज्य सेवा)</option>
+                    <option value="CG Vyapam छात्रावास अधीक्षक">CG Vyapam छात्रावास अधीक्षक (Hostel Warden)</option>
+                    <option value="CG TET">CG TET (शिक्षक पात्रता परीक्षा)</option>
+                    <option value="CG सहायक शिक्षक भर्ती">CG सहायक शिक्षक भर्ती (Assistant Teacher)</option>
+                    <option value="CG Vyapam राजस्व निरीक्षक (RI)">CG Vyapam राजस्व निरीक्षक (RI)</option>
+                    <option value="CG Vyapam पटवारी">CG Vyapam पटवारी (Patwari)</option>
+                    <option value="CG Vyapam मंडी निरीक्षक">CG Vyapam मंडी निरीक्षक (Mandi Nirikshak)</option>
+                    <option value="CG Police सब इंस्पेक्टर (SI)">CG Police सब इंस्पेक्टर (SI Exam)</option>
+                    <option value="CG Vyapam ADO">CG Vyapam ADO (सहायक विकास विस्तार अधिकारी)</option>
+                    <option value="CG Forest Guard">CG Forest Guard (वनरक्षक)</option>
+                    <option value="__custom__">➕ अन्य परीक्षा का नाम लिखें (Custom)...</option>
+                  </select>
+
+                  {pyqExam === '__custom__' && (
+                    <input
+                      type="text"
+                      placeholder="परीक्षा का नाम लिखें"
+                      value={pyqCustomExam}
+                      onChange={(e) => setPyqCustomExam(e.target.value)}
+                      className="w-full mt-2 p-2.5 text-xs font-bold bg-white border border-indigo-400 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                    />
+                  )}
+                </div>
+
+                {/* Exam Year */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5">
+                    वर्ष (Exam Year)*
+                  </label>
+                  <select
+                    value={pyqYear}
+                    onChange={(e) => setPyqYear(parseInt(e.target.value) || 2024)}
+                    className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  >
+                    {[2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015, 2014, 2013, 2012].map(yr => (
+                      <option key={yr} value={yr}>{yr}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Subject for PYQ */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5">
+                    <BookOpen className="h-4 w-4 text-indigo-600" />
+                    विषय (Subject)*
+                  </label>
+                  <select
+                    value={pyqSubject}
+                    onChange={(e) => setPyqSubject(e.target.value)}
+                    className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  >
+                    <option value="छत्तीसगढ़ सामान्य ज्ञान">छत्तीसगढ़ सामान्य ज्ञान</option>
+                    <option value="सामान्य अध्ययन (GS Paper 1)">सामान्य अध्ययन (GS Paper 1)</option>
+                    <option value="भारतीय संविधान एवं राजव्यवस्था">भारतीय संविधान एवं राजव्यवस्था</option>
+                    <option value="भारतीय इतिहास">भारतीय इतिहास</option>
+                    <option value="भूगोल (भारत एवं छत्तीसगढ़)">भूगोल (भारत एवं छत्तीसगढ़)</option>
+                    <option value="सामान्य विज्ञान एवं प्रौद्योगिकी">सामान्य विज्ञान एवं प्रौद्योगिकी</option>
+                    <option value="हिन्दी भाषा">हिन्दी भाषा</option>
+                    <option value="छत्तीसगढ़ी भाषा">छत्तीसगढ़ी भाषा</option>
+                    <option value="कंप्यूटर ज्ञान">कंप्यूटर ज्ञान</option>
+                    <option value="गणित एवं रीजनिंग">गणित एवं रीजनिंग</option>
+                  </select>
+                </div>
+
+                {/* Topic for PYQ */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5">
+                    <Layers className="h-4 w-4 text-indigo-600" />
+                    टॉपिक / भाग (Topic)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="उदा. पेपर 1 / भाग 1 / इतिहास"
+                    value={pyqTopic}
+                    onChange={(e) => setPyqTopic(e.target.value)}
+                    className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Mode Toggle Buttons */}
+              <div className="flex items-center justify-between border-t border-gray-100 pt-3 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-600">प्रश्न इनपुट मोड:</span>
+                  <button
+                    type="button"
+                    onClick={() => setPyqInputMode('bulkHtml')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                      pyqInputMode === 'bulkHtml'
+                        ? 'bg-indigo-700 text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Code2 className="h-4 w-4" />
+                    ⚡ बल्क HTML कोड पार्सर (HTML Parser)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPyqInputMode('manual')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                      pyqInputMode === 'manual'
+                        ? 'bg-indigo-700 text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    📝 सिंगल PYQ फॉर्म (Manual Form)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* BULK HTML PARSER SECTION FOR PYQ */}
+            {pyqInputMode === 'bulkHtml' && (
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-gray-100">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                      <Code2 className="h-4 w-4 text-indigo-600" />
+                      PYQ प्रश्नों का HTML कोड पेस्ट करें (Paste PYQ HTML)
+                    </h3>
+                    <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                      परीक्षा: <strong>{pyqExam === '__custom__' ? pyqCustomExam : pyqExam} ({pyqYear})</strong>
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleLoadPyqSampleHtml}
+                      className="text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                      नमूना PYQ HTML लोड करें
+                    </button>
+                    {pyqBulkHtmlText && (
+                      <button
+                        type="button"
+                        onClick={() => { setPyqBulkHtmlText(''); setPyqParsedQuestions([]); }}
+                        className="text-xs font-bold text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
+                      >
+                        साफ करें
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <textarea
+                    rows={9}
+                    value={pyqBulkHtmlText}
+                    onChange={(e) => setPyqBulkHtmlText(e.target.value)}
+                    placeholder={`यहाँ PYQ HTML कोड दर्ज करें...`}
+                    className="w-full p-3.5 text-xs font-mono bg-slate-900 text-indigo-300 rounded-xl border border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleParsePyqBulkHtml}
+                    className="w-full sm:w-auto px-6 py-3 rounded-xl text-xs font-extrabold text-white bg-indigo-700 hover:bg-indigo-800 transition flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                  >
+                    <Wand2 className="h-4 w-4 text-amber-300" />
+                    ⚡ HTML पार्स करें व पूर्वावलोकन देखें (Parse & Preview)
+                  </button>
+
+                  {pyqParsedQuestions.length > 0 && (
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        disabled={pyqSaving}
+                        onClick={() => handleSavePyqQuestions('append')}
+                        className="flex-1 sm:flex-none px-6 py-3 rounded-xl text-xs font-extrabold text-white bg-emerald-700 hover:bg-emerald-800 transition flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                      >
+                        <Save className="h-4 w-4" />
+                        {pyqSaving ? "सहेजा जा रहा है..." : `💾 ${pyqParsedQuestions.length} PYQ प्रश्न बैंक में सुरक्षित करें (Save)`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* PARSED PREVIEW ACCORDION FOR PYQ */}
+                {pyqParsedQuestions.length > 0 && (
+                  <div className="mt-6 space-y-3 pt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-between bg-indigo-50 p-3.5 rounded-xl border border-indigo-200">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-5 w-5 text-indigo-700" />
+                        <span className="text-xs font-extrabold text-indigo-900">
+                          पार्स किए गए PYQ प्रश्न ({pyqParsedQuestions.length}) — लाइव पूर्वावलोकन
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-indigo-700 font-bold">
+                        परीक्षा: {pyqExam === '__custom__' ? pyqCustomExam : pyqExam} ({pyqYear})
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                      {pyqParsedQuestions.map((q, idx) => (
+                        <div
+                          key={q.id || idx}
+                          className="bg-white rounded-xl border border-gray-200 p-4 shadow-xs hover:border-indigo-300 transition"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-2.5 flex-1">
+                              <span className="shrink-0 w-6 h-6 rounded-lg bg-indigo-100 text-indigo-900 text-xs font-black flex items-center justify-center">
+                                {idx + 1}
+                              </span>
+                              <div className="space-y-2 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-black bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded-md">
+                                    {q.exam} - {q.year}
+                                  </span>
+                                  <span className="text-[10px] text-gray-500 font-bold">
+                                    {q.subject}
+                                  </span>
+                                </div>
+                                <RichTextRenderer
+                                  content={q.text_hi}
+                                  as="div"
+                                  className="text-xs font-bold text-gray-900"
+                                />
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                  {q.options_hi.map((opt, optIdx) => (
+                                    <div
+                                      key={optIdx}
+                                      className={`p-2 rounded-lg text-xs font-medium border flex items-start gap-2 ${
+                                        q.correctAnswer === optIdx
+                                          ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold'
+                                          : 'bg-gray-50 border-gray-200 text-gray-700'
+                                      }`}
+                                    >
+                                      <span className={`w-4 h-4 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5 ${
+                                        q.correctAnswer === optIdx
+                                          ? 'bg-emerald-600 text-white'
+                                          : 'bg-gray-200 text-gray-600'
+                                      }`}>
+                                        {String.fromCharCode(65 + optIdx)}
+                                      </span>
+                                      <RichTextRenderer content={opt} as="span" className="flex-1" />
+                                      {q.correctAnswer === optIdx && (
+                                        <Check className="h-3.5 w-3.5 text-emerald-600 ml-auto shrink-0 mt-0.5" />
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {q.explanation_hi && (
+                                  <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-2.5 text-[11px] text-amber-900 font-medium">
+                                    <span className="font-bold text-amber-950 block mb-1">व्याख्या: </span>
+                                    <RichTextRenderer content={q.explanation_hi} as="div" />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setPyqParsedQuestions(pyqParsedQuestions.filter((_, i) => i !== idx))}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                              title="हटाएं"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* MANUAL SINGLE PYQ FORM */}
+            {pyqInputMode === 'manual' && (
+              <form onSubmit={handleSaveSinglePyqQuestion} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs space-y-4">
+                <div className="pb-2 border-b border-gray-100">
+                  <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                    <PlusCircle className="h-4 w-4 text-indigo-600" />
+                    सिंगल विगत वर्ष प्रश्न जोड़ें (Add Single PYQ)
+                  </h3>
+                  <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                    परीक्षा: <strong>{pyqExam === '__custom__' ? pyqCustomExam : pyqExam} ({pyqYear})</strong> | विषय: <strong>{pyqSubject}</strong>
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700 block">प्रश्न (हिन्दी में)*</label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={pyqSingleTextHi}
+                    onChange={(e) => setPyqSingleTextHi(e.target.value)}
+                    placeholder="PYQ प्रश्न का संपूर्ण विवरण यहाँ लिखें..."
+                    className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {pyqSingleOptionsHi.map((opt, optIdx) => (
+                    <div key={optIdx} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-gray-700">
+                          विकल्प {String.fromCharCode(65 + optIdx)}*
+                        </label>
+                        <label className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="pyqCorrectAnswer"
+                            checked={pyqSingleCorrectAnswer === optIdx}
+                            onChange={() => setPyqSingleCorrectAnswer(optIdx)}
+                            className="text-indigo-600 focus:ring-indigo-500"
+                          />
+                          सही उत्तर (Correct)
+                        </label>
+                      </div>
+                      <input
+                        type="text"
+                        required={optIdx < 2}
+                        value={opt}
+                        onChange={(e) => {
+                          const updated = [...pyqSingleOptionsHi];
+                          updated[optIdx] = e.target.value;
+                          setPyqSingleOptionsHi(updated);
+                        }}
+                        placeholder={`विकल्प ${String.fromCharCode(65 + optIdx)} का टेक्स्ट`}
+                        className={`w-full p-2.5 text-xs font-bold rounded-xl border focus:ring-2 focus:ring-indigo-500 ${
+                          pyqSingleCorrectAnswer === optIdx
+                            ? 'bg-emerald-50 border-emerald-300'
+                            : 'bg-gray-50 border-gray-300'
+                        }`}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700 block">विस्तृत व्याख्या / समाधान (Explanation)</label>
+                  <textarea
+                    rows={2}
+                    value={pyqSingleExplanationHi}
+                    onChange={(e) => setPyqSingleExplanationHi(e.target.value)}
+                    placeholder="प्रश्न के सही उत्तर का संक्षिप्त विवरण एवं संदर्भ..."
+                    className="w-full p-2.5 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={pyqSaving}
+                    className="px-6 py-2.5 rounded-xl text-xs font-extrabold text-white bg-indigo-700 hover:bg-indigo-800 transition flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                  >
+                    <Save className="h-4 w-4" />
+                    {pyqSaving ? "सहेजा जा रहा है..." : "डेटाबेस में PYQ सुरक्षित करें (Save PYQ)"}
+                  </button>
+                </div>
+              </form>
             )}
           </div>
         )}

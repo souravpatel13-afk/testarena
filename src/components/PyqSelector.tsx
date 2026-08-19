@@ -10,10 +10,13 @@ import {
   CheckCircle,
   Star,
   Award,
-  ArrowLeft
+  ArrowLeft,
+  Share2
 } from 'lucide-react';
 import { Question } from '../types';
 import { isPyq } from '../utils/quizHelpers';
+import ShareModal from './ShareModal';
+import { ShareOptions } from '../utils/shareUtils';
 
 interface PyqSelectorProps {
   questions: Question[];
@@ -24,6 +27,37 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
   const [pyqSubTab, setPyqSubTab] = useState<'exam' | 'topic'>('exam');
   const [selectedExam, setSelectedExam] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [shareConfig, setShareConfig] = useState<ShareOptions | null>(null);
+
+  // Popstate listener for mobile back button & modal handling
+  React.useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (shareConfig) {
+        setShareConfig(null);
+        return;
+      }
+      if (selectedExam) {
+        const stateExam = e.state?.exam;
+        if (!stateExam) {
+          setSelectedExam(null);
+        }
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [shareConfig, selectedExam]);
+
+  const handleSelectExam = (examName: string) => {
+    setSelectedExam(examName);
+    window.history.pushState({ tab: 'pyqs', exam: examName, view: 'pyq-years' }, '', `#pyqs/${encodeURIComponent(examName)}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBackToExams = () => {
+    setSelectedExam(null);
+    window.history.pushState({ tab: 'pyqs', view: 'tab' }, '', '#pyqs');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Group PYQ questions by Exam for the "Exam-wise PYQ" view
   const pyqExams = [...new Set(questions.filter(isPyq).map(q => q.exam).filter(Boolean))] as string[];
@@ -176,7 +210,7 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
             <div className="space-y-6 animate-in fade-in duration-200" id="pyq-year-selector">
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setSelectedExam(null)}
+                  onClick={handleBackToExams}
                   className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition cursor-pointer flex items-center justify-center"
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -226,21 +260,34 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        const examQuestions = questions.filter(q => isPyq(q) && q.exam === selectedExam).map(q => q.id);
-                        onStartDynamicQuiz(
-                          `${selectedExam} - Full Combined Mock`,
-                          'pyq',
-                          examQuestions,
-                          undefined,
-                          undefined
-                        );
-                      }}
-                      className="w-full bg-emerald-800 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
-                    >
-                      Start Combined Paper <Play className="h-3.5 w-3.5 fill-white" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const examQuestions = questions.filter(q => isPyq(q) && q.exam === selectedExam).map(q => q.id);
+                          onStartDynamicQuiz(
+                            `${selectedExam} - Full Combined Mock`,
+                            'pyq',
+                            examQuestions,
+                            undefined,
+                            undefined
+                          );
+                        }}
+                        className="flex-1 bg-emerald-800 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                      >
+                        Start Combined Paper <Play className="h-3.5 w-3.5 fill-white" />
+                      </button>
+                      <button
+                        onClick={() => setShareConfig({
+                          type: 'pyq',
+                          exam: selectedExam,
+                          qCount: questions.filter(q => isPyq(q) && q.exam === selectedExam).length
+                        })}
+                        title="संयुक्त पेपर शेयर करें"
+                        className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl transition border border-emerald-200 cursor-pointer"
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -285,12 +332,26 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
                           </div>
                         </div>
 
-                        <button
-                          onClick={() => handleStartExamYearPYQ(selectedExam, year)}
-                          className="w-full bg-emerald-800 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
-                        >
-                          Start {year} Paper <Play className="h-3.5 w-3.5 fill-white" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleStartExamYearPYQ(selectedExam, year)}
+                            className="flex-1 bg-emerald-800 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                          >
+                            Start {year} Paper <Play className="h-3.5 w-3.5 fill-white" />
+                          </button>
+                          <button
+                            onClick={() => setShareConfig({
+                              type: 'pyq',
+                              exam: selectedExam,
+                              year: year,
+                              qCount: yearQCount
+                            })}
+                            title="वर्ष पेपर शेयर करें"
+                            className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl transition border border-emerald-200 cursor-pointer"
+                          >
+                            <Share2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -329,12 +390,25 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handleStartExamYearPYQ(selectedExam, null)}
-                        className="w-full bg-slate-800 text-white font-bold py-2.5 rounded-xl hover:bg-slate-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
-                      >
-                        Start General Paper <Play className="h-3.5 w-3.5 fill-white" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleStartExamYearPYQ(selectedExam, null)}
+                          className="flex-1 bg-slate-800 text-white font-bold py-2.5 rounded-xl hover:bg-slate-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                        >
+                          Start General Paper <Play className="h-3.5 w-3.5 fill-white" />
+                        </button>
+                        <button
+                          onClick={() => setShareConfig({
+                            type: 'pyq',
+                            exam: selectedExam,
+                            qCount: questions.filter(q => isPyq(q) && q.exam === selectedExam && !q.year).length
+                          })}
+                          title="पेपर शेयर करें"
+                          className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition border border-slate-200 cursor-pointer"
+                        >
+                          <Share2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -344,9 +418,19 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Official Exam Sheets</h2>
-                <span className="text-xs bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold font-sans">
-                  {pyqExams.length} Exam Papers
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShareConfig({
+                      type: 'website'
+                    })}
+                    className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold px-3 py-1 rounded-lg border border-emerald-200 flex items-center gap-1 cursor-pointer transition"
+                  >
+                    <Share2 className="h-3 w-3" /> PYQs शेयर करें
+                  </button>
+                  <span className="text-xs bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold font-sans">
+                    {pyqExams.length} Exam Papers
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -394,12 +478,25 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
                             </div>
                           </div>
 
-                          <button
-                            onClick={() => setSelectedExam(examName)}
-                            className="w-full bg-emerald-800 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
-                          >
-                            Select Exam Year <Play className="h-3.5 w-3.5 fill-white" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSelectExam(examName)}
+                              className="flex-1 bg-emerald-800 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                            >
+                              Select Exam Year <Play className="h-3.5 w-3.5 fill-white" />
+                            </button>
+                            <button
+                              onClick={() => setShareConfig({
+                                type: 'pyq',
+                                exam: examName,
+                                qCount: examQCount
+                              })}
+                              title="परीक्षा PYQ शेयर करें"
+                              className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl transition border border-emerald-200 cursor-pointer"
+                            >
+                              <Share2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -435,12 +532,24 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
                         </span>
                       </div>
 
-                      <button
-                        onClick={() => handleStartSubjectPYQ(subjectName, allSubjectQIds)}
-                        className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold px-3.5 py-1.5 rounded-xl transition text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer self-start sm:self-auto"
-                      >
-                        <Play className="h-3.5 w-3.5 fill-white" /> संपूर्ण विषय क्विज ({allSubjectQIds.length} प्रश्न)
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShareConfig({
+                            type: 'pyq',
+                            exam: `${subjectName} PYQs`,
+                            qCount: allSubjectQIds.length
+                          })}
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-xl transition text-xs flex items-center justify-center gap-1 border border-emerald-200 cursor-pointer"
+                        >
+                          <Share2 className="h-3.5 w-3.5" /> शेयर करें
+                        </button>
+                        <button
+                          onClick={() => handleStartSubjectPYQ(subjectName, allSubjectQIds)}
+                          className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold px-3.5 py-1.5 rounded-xl transition text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer self-start sm:self-auto"
+                        >
+                          <Play className="h-3.5 w-3.5 fill-white" /> संपूर्ण विषय क्विज ({allSubjectQIds.length} प्रश्न)
+                        </button>
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -454,13 +563,27 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
                             <p className="text-[10px] text-gray-400 font-bold font-sans">{qIds.length} Topic PYQs</p>
                           </div>
                           
-                          <button
-                            onClick={() => handleStartTopicPYQ(subjectName, topicName, qIds)}
-                            className="p-2.5 bg-emerald-50 hover:bg-emerald-700 hover:text-white text-emerald-800 rounded-xl transition cursor-pointer"
-                            title="Start Topic Quiz"
-                          >
-                            <Play className="h-4 w-4 fill-current" />
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => setShareConfig({
+                                type: 'topic',
+                                subject: subjectName,
+                                topic: topicName,
+                                qCount: qIds.length
+                              })}
+                              className="p-2.5 bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-emerald-800 rounded-xl transition border border-gray-200 cursor-pointer"
+                              title="Share Topic PYQs"
+                            >
+                              <Share2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleStartTopicPYQ(subjectName, topicName, qIds)}
+                              className="p-2.5 bg-emerald-50 hover:bg-emerald-700 hover:text-white text-emerald-800 rounded-xl transition cursor-pointer"
+                              title="Start Topic Quiz"
+                            >
+                              <Play className="h-4 w-4 fill-current" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -471,6 +594,13 @@ export default function PyqSelector({ questions, onStartDynamicQuiz }: PyqSelect
           </div>
         )}
       </div>
+
+      {/* Share Modal */}
+      <ShareModal 
+        isOpen={!!shareConfig}
+        onClose={() => setShareConfig(null)}
+        options={shareConfig || { type: 'website' }}
+      />
 
     </div>
   );

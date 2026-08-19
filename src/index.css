@@ -31,3 +31,43 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Rich HTML Question & Options Content Rendering (<br>, lists, tables, bold) */
+.rich-html-content {
+  word-break: break-word;
+}
+
+.rich-html-content br {
+  display: inline-block;
+  content: "";
+  margin-top: 0.25rem;
+  width: 100%;
+}
+
+.rich-html-content p {
+  margin-bottom: 0.35rem;
+}
+
+.rich-html-content p:last-child {
+  margin-bottom: 0;
+}
+
+.rich-html-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  font-size: 0.85em;
+}
+
+.rich-html-content th,
+.rich-html-content td {
+  border: 1px solid #e5e7eb;
+  padding: 0.35rem 0.5rem;
+}
+
+.rich-html-content ul,
+.rich-html-content ol {
+  padding-left: 1.25rem;
+  margin: 0.35rem 0;
+}
+

@@ -19,7 +19,8 @@ import {
   Home as HomeIcon,
   Newspaper,
   LogOut,
-  Sparkles
+  Sparkles,
+  Share2
 } from 'lucide-react';
 import { Question, Quiz, User, CurrentAffairsItem, ExamInfo } from './types';
 import Home from './components/Home';
@@ -35,6 +36,8 @@ import AdminPanel from './components/AdminPanel';
 import AboutExam from './components/AboutExam';
 import { PrivacyPolicy, TermsConditions, Disclaimer } from './components/LegalPages';
 import SEOHead from './components/SEOHead';
+import ShareModal from './components/ShareModal';
+import { ShareOptions } from './utils/shareUtils';
 import { auth, logout } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
@@ -42,6 +45,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'daily-practice' | 'exam-info' | 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'privacy' | 'terms' | 'disclaimer'>('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [fbUser, setFbUser] = useState<FirebaseUser | null>(null);
+  const [shareModalConfig, setShareModalConfig] = useState<ShareOptions | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -103,23 +107,98 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    // Sync initial activeTab from URL search param or hash if available
+  const getTabFromLocation = (): any => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
-      const hashParam = window.location.hash.replace('#', '');
-      const initialTab = tabParam || hashParam;
+      const hash = window.location.hash.replace('#', '').split('/')[0];
+      const found = tabParam || hash;
       const validTabs = ['home', 'daily-practice', 'exam-info', 'dashboard', 'pyqs', 'subjects', 'current-affairs', 'about', 'contact', 'admin', 'privacy', 'terms', 'disclaimer'];
-      if (initialTab && validTabs.includes(initialTab)) {
-        setActiveTab(initialTab as any);
+      if (found && validTabs.includes(found)) {
+        return found;
       }
     } catch (e) {
       console.error("Error reading URL parameters:", e);
     }
+    return null;
+  };
+
+  // Centralized navigation handler with history pushState
+  const navigateTo = (tab: typeof activeTab, options: { pushHistory?: boolean; scrollToTop?: boolean } = {}) => {
+    const { pushHistory = true, scrollToTop = true } = options;
+    setActiveTab(tab);
+    setIsQuizRunning(false);
+    setMobileMenuOpen(false);
+    setShareModalConfig(null);
+
+    if (pushHistory) {
+      const hash = tab === 'home' ? '' : `#${tab}`;
+      const url = tab === 'home' ? window.location.pathname : `${window.location.pathname}${hash}`;
+      window.history.pushState({ tab, view: 'tab' }, '', url);
+    }
+
+    if (scrollToTop) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Initial Load & URL Route Synchronisation
+  useEffect(() => {
+    const initialTab = getTabFromLocation() || 'home';
+    setActiveTab(initialTab);
+    const hash = initialTab === 'home' ? '' : `#${initialTab}`;
+    const url = initialTab === 'home' ? window.location.pathname : `${window.location.pathname}${hash}`;
+    window.history.replaceState({ tab: initialTab, view: 'tab' }, '', url);
 
     loadData();
   }, []);
+
+  // Global PopState (Mobile Back Button & Browser Back) Handler
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // 1. If Share modal is open, close it first without navigating away
+      if (shareModalConfig) {
+        setShareModalConfig(null);
+        return;
+      }
+
+      // 2. If Mobile hamburger menu is open, close it first
+      if (mobileMenuOpen) {
+        setMobileMenuOpen(false);
+        return;
+      }
+
+      // 3. If Quiz is actively in progress, ask for confirmation so user doesn't lose test progress accidentally
+      if (isQuizRunning) {
+        const confirmExit = window.confirm("क्या आप टेस्ट से बाहर निकलना चाहते हैं? आपकी वर्तमान प्रगति समाप्त हो जाएगी। (Are you sure you want to exit the quiz?)");
+        if (confirmExit) {
+          setIsQuizRunning(false);
+          const targetTab = event.state?.tab || getTabFromLocation() || 'home';
+          setActiveTab(targetTab);
+        } else {
+          // Re-push quiz state so history stack stays intact
+          window.history.pushState({ tab: activeTab, view: 'quiz' }, '', '#quiz');
+        }
+        return;
+      }
+
+      // 4. Tab Navigation from History state or URL hash
+      const stateTab = event.state?.tab;
+      const hashTab = getTabFromLocation();
+      const nextTab = stateTab || hashTab || 'home';
+      const validTabs = ['home', 'daily-practice', 'exam-info', 'dashboard', 'pyqs', 'subjects', 'current-affairs', 'about', 'contact', 'admin', 'privacy', 'terms', 'disclaimer'];
+      
+      if (validTabs.includes(nextTab)) {
+        setActiveTab(nextTab as any);
+        setIsQuizRunning(false);
+      } else {
+        setActiveTab('home');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [shareModalConfig, mobileMenuOpen, isQuizRunning, activeTab]);
 
   const handleStartQuiz = (quizId: string) => {
     const selected = quizzes.find(q => q.id === quizId);
@@ -127,6 +206,10 @@ export default function App() {
       setActiveQuiz(selected);
       setDynamicQuizData(undefined);
       setIsQuizRunning(true);
+      setMobileMenuOpen(false);
+      setShareModalConfig(null);
+      window.history.pushState({ tab: activeTab, view: 'quiz', quizTitle: selected.title }, '', '#quiz');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -140,6 +223,10 @@ export default function App() {
     setActiveQuiz(null);
     setDynamicQuizData({ title, type, questionIds, subject, topic });
     setIsQuizRunning(true);
+    setMobileMenuOpen(false);
+    setShareModalConfig(null);
+    window.history.pushState({ tab: activeTab, view: 'quiz', quizTitle: title }, '', '#quiz');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleAttemptSubmitted = () => {
@@ -148,9 +235,7 @@ export default function App() {
   };
 
   const handleFooterNav = (tab: 'home' | 'daily-practice' | 'dashboard' | 'pyqs' | 'subjects' | 'current-affairs' | 'about' | 'contact' | 'admin' | 'privacy' | 'terms' | 'disclaimer') => {
-    setActiveTab(tab);
-    setIsQuizRunning(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo(tab);
   };
 
   if (loading) {
@@ -227,10 +312,7 @@ export default function App() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setIsQuizRunning(false);
-                  }}
+                  onClick={() => navigateTo(item.id)}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition select-none ${
                     isActive 
                       ? 'bg-emerald-600 text-white shadow-sm' 
@@ -243,8 +325,16 @@ export default function App() {
             })}
           </nav>
 
-          {/* User badge identity details & Admin Login Button */}
+          {/* User badge identity details & Admin Login Button & Share Button */}
           <div className="hidden md:flex items-center gap-3 pl-4 border-l border-slate-800">
+            <button
+              onClick={() => setShareModalConfig({ type: 'website' })}
+              title="Share Website"
+              className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl transition shadow-xs cursor-pointer"
+            >
+              <Share2 className="h-3.5 w-3.5" /> <span>शेयर करें</span>
+            </button>
+
             {fbUser ? (
               <>
                 <div className="text-right">
@@ -263,7 +353,7 @@ export default function App() {
                 <button
                   onClick={async () => {
                     await logout();
-                    if (activeTab === 'admin') setActiveTab('home');
+                    if (activeTab === 'admin') navigateTo('home');
                   }}
                   title="Log out"
                   className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
@@ -273,11 +363,8 @@ export default function App() {
               </>
             ) : (
               <button
-                onClick={() => {
-                  setActiveTab('admin');
-                  setIsQuizRunning(false);
-                }}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition shadow-xs cursor-pointer"
+                onClick={() => navigateTo('admin')}
+                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold px-3.5 py-2 rounded-xl transition border border-slate-700 cursor-pointer"
               >
                 <Settings className="h-3.5 w-3.5" /> Admin Login
               </button>
@@ -286,6 +373,13 @@ export default function App() {
 
           {/* Mobile Hamburg Toggle Button */}
           <div className="md:hidden flex items-center gap-2">
+            <button
+              onClick={() => setShareModalConfig({ type: 'website' })}
+              className="p-2 bg-emerald-600 text-white rounded-xl text-xs flex items-center gap-1 font-bold shadow-xs"
+              title="Share"
+            >
+              <Share2 className="h-4 w-4" />
+            </button>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl"
@@ -299,17 +393,25 @@ export default function App() {
         {/* Mobile menu panel dropdown */}
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-slate-800 bg-slate-900 p-3 space-y-1 shadow-inner animate-in slide-in-from-top-4 duration-150 text-white">
+            <div className="pb-2">
+              <button
+                onClick={() => {
+                  setShareModalConfig({ type: 'website' });
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs cursor-pointer"
+              >
+                <Share2 className="h-4 w-4" /> पोर्टल मित्रों के साथ शेयर करें (Share Portal)
+              </button>
+            </div>
+
             {navigationItems.map(item => {
               const Icon = item.icon;
               const isActive = activeTab === item.id && !isQuizRunning;
               return (
                 <button
                   key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setIsQuizRunning(false);
-                    setMobileMenuOpen(false);
-                  }}
+                  onClick={() => navigateTo(item.id)}
                   className={`w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-xs font-bold transition ${
                     isActive 
                       ? 'bg-emerald-600 text-white' 
@@ -376,10 +478,7 @@ export default function App() {
           <div className="py-2" id="tab-views-container">
             {activeTab === 'home' && (
               <Home 
-                onNavigate={(tab) => {
-                  setActiveTab(tab as any);
-                  setIsQuizRunning(false);
-                }}
+                onNavigate={(tab) => navigateTo(tab as any)}
                 questionsCount={questions.length}
                 quizzesCount={quizzes.length}
                 exams={exams}
@@ -389,20 +488,14 @@ export default function App() {
 
             {activeTab === 'daily-practice' && (
               <DailyPractice 
-                onBackToHome={() => {
-                  setActiveTab('home');
-                  setIsQuizRunning(false);
-                }}
+                onBackToHome={() => navigateTo('home')}
               />
             )}
 
             {activeTab === 'exam-info' && (
               <AboutExam 
                 exams={exams} 
-                onNavigateToPractice={(examName) => {
-                  setActiveTab('pyqs');
-                  setIsQuizRunning(false);
-                }} 
+                onNavigateToPractice={(examName) => navigateTo('pyqs')} 
               />
             )}
 
@@ -590,6 +683,13 @@ export default function App() {
           </p>
         </div>
       </footer>
+
+      {/* Global Share Modal */}
+      <ShareModal
+        isOpen={!!shareModalConfig}
+        onClose={() => setShareModalConfig(null)}
+        options={shareModalConfig || { type: 'website' }}
+      />
 
     </div>
   );

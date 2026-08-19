@@ -8,10 +8,13 @@ import {
   BookMarked,
   Grid,
   Layers,
-  CheckCircle
+  CheckCircle,
+  Share2
 } from 'lucide-react';
 import { Quiz, Question } from '../types';
 import { isSubjectTestQuestion } from '../utils/quizHelpers';
+import ShareModal from './ShareModal';
+import { ShareOptions } from '../utils/shareUtils';
 
 interface SubjectSelectorProps {
   quizzes: Quiz[];
@@ -23,6 +26,18 @@ interface SubjectSelectorProps {
 export default function SubjectSelector({ quizzes, questions, onSelectQuiz, onStartDynamicQuiz }: SubjectSelectorProps) {
   const [subjectSubTab, setSubjectSubTab] = useState<'subject' | 'topic'>('subject');
   const [searchQuery, setSearchQuery] = useState('');
+  const [shareConfig, setShareConfig] = useState<ShareOptions | null>(null);
+
+  // Close share modal if mobile back is pressed
+  React.useEffect(() => {
+    const handlePopState = () => {
+      if (shareConfig) {
+        setShareConfig(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [shareConfig]);
 
   // Filter all questions to only those belonging in Subject Tests
   const subjectQuestionsFiltered = questions.filter(isSubjectTestQuestion);
@@ -195,12 +210,25 @@ export default function SubjectSelector({ quizzes, questions, onSelectQuiz, onSt
                               </div>
                             </div>
 
-                            <button
-                              onClick={() => handleStartEntireSubjectTest(subjectName, qIds)}
-                              className="w-full bg-emerald-800 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
-                            >
-                              पूरा विषय टेस्ट शुरू करें <Play className="h-3.5 w-3.5 fill-white" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleStartEntireSubjectTest(subjectName, qIds)}
+                                className="flex-1 bg-emerald-800 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-900 transition-colors text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                              >
+                                पूरा विषय टेस्ट शुरू करें <Play className="h-3.5 w-3.5 fill-white" />
+                              </button>
+                              <button
+                                onClick={() => setShareConfig({
+                                  type: 'subject',
+                                  subject: subjectName,
+                                  qCount: qIds.length
+                                })}
+                                title="विषय टेस्ट शेयर करें"
+                                className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl transition border border-emerald-200 cursor-pointer"
+                              >
+                                <Share2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -243,7 +271,18 @@ export default function SubjectSelector({ quizzes, questions, onSelectQuiz, onSt
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
                         {subjectName}
                       </h3>
-                      <span className="text-xs text-gray-400 font-bold">{filteredTopics.length} Topics</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShareConfig({
+                            type: 'subject',
+                            subject: subjectName
+                          })}
+                          className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold px-3 py-1 rounded-lg border border-emerald-200 flex items-center gap-1 cursor-pointer transition"
+                        >
+                          <Share2 className="h-3 w-3" /> विषय शेयर करें
+                        </button>
+                        <span className="text-xs text-gray-400 font-bold">{filteredTopics.length} Topics</span>
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -271,12 +310,26 @@ export default function SubjectSelector({ quizzes, questions, onSelectQuiz, onSt
                                 </p>
                               </div>
 
-                              <button
-                                onClick={() => handleStartTopicwiseQuiz(subjectName, topicName, qIds)}
-                                className={`w-full py-3 px-4 font-bold rounded-2xl transition-all duration-200 text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer ${theme.btnBg}`}
-                              >
-                                <Play className="h-3.5 w-3.5 fill-current" /> Start Practice
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleStartTopicwiseQuiz(subjectName, topicName, qIds)}
+                                  className={`flex-1 py-3 px-4 font-bold rounded-2xl transition-all duration-200 text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer ${theme.btnBg}`}
+                                >
+                                  <Play className="h-3.5 w-3.5 fill-current" /> Start Practice
+                                </button>
+                                <button
+                                  onClick={() => setShareConfig({
+                                    type: 'topic',
+                                    subject: subjectName,
+                                    topic: topicName,
+                                    qCount: qIds.length
+                                  })}
+                                  title="टॉपिक टेस्ट शेयर करें"
+                                  className="p-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-2xl transition border border-gray-200 cursor-pointer"
+                                >
+                                  <Share2 className="h-4 w-4" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -289,6 +342,13 @@ export default function SubjectSelector({ quizzes, questions, onSelectQuiz, onSt
           </div>
         )}
       </div>
+
+      {/* Share Modal */}
+      <ShareModal 
+        isOpen={!!shareConfig}
+        onClose={() => setShareConfig(null)}
+        options={shareConfig || { type: 'website' }}
+      />
 
     </div>
   );
