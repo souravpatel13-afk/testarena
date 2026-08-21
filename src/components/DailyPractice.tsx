@@ -25,11 +25,30 @@ import {
   Briefcase,
   ChevronRight,
   Filter,
-  Layers
+  Layers,
+  Play,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { DailyPracticeSet, DailyPracticeQuestion, DailyPracticeCategory } from '../types';
 import ShareModal from './ShareModal';
 import { ShareOptions } from '../utils/shareUtils';
+
+export const DAILY_PRACTICE_PROGRESS_KEY = 'testarena_daily_practice_saved_session';
+
+export interface SavedDailySession {
+  setId: string;
+  setDate: string;
+  setTitle: string;
+  category?: string;
+  subject?: string;
+  currentIndex: number;
+  selectedAnswers: Record<number, number>;
+  showExplanations: Record<number, boolean>;
+  instantMode: boolean;
+  timerSeconds: number;
+  savedAt: number;
+}
 
 interface DailyPracticeProps {
   onBackToHome?: () => void;
@@ -65,6 +84,55 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
   const [instantMode, setInstantMode] = useState<boolean>(true); // Immediate feedback mode
   const [isFinished, setIsFinished] = useState<boolean>(false);
   const [timerSeconds, setTimerSeconds] = useState<number>(0);
+  const [showSubmitModal, setShowSubmitModal] = useState<boolean>(false);
+
+  // Resume Test Session State
+  const [savedSession, setSavedSession] = useState<SavedDailySession | null>(null);
+
+  // Check and read saved incomplete session from localStorage
+  const checkSavedSession = () => {
+    try {
+      const raw = localStorage.getItem(DAILY_PRACTICE_PROGRESS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && (parsed.setId || parsed.setDate)) {
+          setSavedSession(parsed);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("Error reading saved practice session:", e);
+    }
+    setSavedSession(null);
+  };
+
+  useEffect(() => {
+    checkSavedSession();
+  }, [activeSet]);
+
+  // Real-time Auto-save while practice test is active and not finished
+  useEffect(() => {
+    if (activeSet && !isFinished) {
+      try {
+        const sessionData: SavedDailySession = {
+          setId: activeSet.id,
+          setDate: activeSet.date,
+          setTitle: activeSet.title,
+          category: activeSet.category || activeSet.subject,
+          subject: activeSet.subject,
+          currentIndex,
+          selectedAnswers,
+          showExplanations,
+          instantMode,
+          timerSeconds,
+          savedAt: Date.now()
+        };
+        localStorage.setItem(DAILY_PRACTICE_PROGRESS_KEY, JSON.stringify(sessionData));
+      } catch (err) {
+        console.error("Error saving daily practice session:", err);
+      }
+    }
+  }, [activeSet, currentIndex, selectedAnswers, showExplanations, instantMode, timerSeconds, isFinished]);
 
   const fetchDailyPracticeSets = async () => {
     setLoading(true);
@@ -168,6 +236,12 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
   // PopState (Mobile Back Button) Listener inside Daily Practice
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
+      // 0. Close submit modal if open
+      if (showSubmitModal) {
+        setShowSubmitModal(false);
+        return;
+      }
+
       // 1. Close share modal if open
       if (shareConfig) {
         setShareConfig(null);
@@ -177,10 +251,11 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
       // 2. If user is currently running a practice test set
       if (activeSet) {
         if (!isFinished) {
-          const confirmExit = window.confirm("क्या आप दैनिक अभ्यास टेस्ट छोड़ना चाहते हैं? आपकी प्रगति सुरक्षित नहीं होगी।");
+          const confirmExit = window.confirm("क्या आप दैनिक अभ्यास टेस्ट से बाहर जाना चाहते हैं?\n\nआपकी प्रगति (हल किए गए प्रश्न व समय) सुरक्षित कर ली गई है। आप इसे बाद में कभी भी 'Resume Test' से जारी रख सकते हैं।");
           if (confirmExit) {
             setActiveSet(null);
             setIsFinished(false);
+            checkSavedSession();
           } else {
             // Re-push test state so history stays synchronized
             window.history.pushState(
@@ -193,6 +268,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
           // Finished viewing scorecard -> return to category sets list
           setActiveSet(null);
           setIsFinished(false);
+          checkSavedSession();
         }
         return;
       }
@@ -213,7 +289,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [shareConfig, activeSet, isFinished, selectedCategory]);
+  }, [showSubmitModal, shareConfig, activeSet, isFinished, selectedCategory]);
 
   const handleSelectCategory = (catName: string) => {
     setSelectedCategory(catName);
@@ -228,11 +304,22 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
   const handleBackToCategories = () => {
     setSelectedCategory(null);
     setActiveSet(null);
+    checkSavedSession();
     window.history.pushState({ tab: 'daily-practice', view: 'tab' }, '', '#daily-practice');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleStartSet = (set: DailyPracticeSet) => {
+    // If there is saved progress for this set, prompt user
+    if (savedSession && (savedSession.setId === set.id || savedSession.setDate === set.date)) {
+      const answeredCount = Object.keys(savedSession.selectedAnswers || {}).length;
+      const resumeChoice = window.confirm(`इस टेस्ट में आपकी पहले की प्रगति सुरक्षित है (${answeredCount} प्रश्न हल किए गए)।\n\nक्या आप वहीं से टेस्ट जारी (Resume) रखना चाहते हैं?\n\n[OK] = टेस्ट जारी रखें (Resume)\n[Cancel] = नया टेस्ट शुरू करें (Start Fresh)`);
+      if (resumeChoice) {
+        handleResumeSession(savedSession);
+        return;
+      }
+    }
+
     setActiveSet(set);
     setCurrentIndex(0);
     setSelectedAnswers({});
@@ -247,10 +334,55 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleResumeSession = (targetSession?: SavedDailySession | null) => {
+    const session = targetSession || savedSession;
+    if (!session) return;
+
+    // Match set by ID or date from loaded sets
+    let matchedSet = sets.find(s => s.id === session.setId || s.date === session.setDate);
+    if (!matchedSet) {
+      alert("यह टेस्ट सेट वर्तमान में लोड नहीं हो सका। कृपया पुनः प्रयास करें।");
+      return;
+    }
+
+    setActiveSet(matchedSet);
+    const validQuestionsCount = matchedSet.questions?.length || 1;
+    setCurrentIndex(Math.min(session.currentIndex || 0, validQuestionsCount - 1));
+    setSelectedAnswers(session.selectedAnswers || {});
+    setShowExplanations(session.showExplanations || {});
+    setInstantMode(session.instantMode !== undefined ? session.instantMode : true);
+    setTimerSeconds(session.timerSeconds || 0);
+    setIsFinished(false);
+    setShowSubmitModal(false);
+
+    if (session.category) {
+      setSelectedCategory(session.category);
+    }
+
+    window.history.pushState(
+      { tab: 'daily-practice', category: session.category || selectedCategory, setDate: matchedSet.date, view: 'daily-test' }, 
+      '', 
+      `#daily-practice/test/${encodeURIComponent(matchedSet.date)}`
+    );
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDiscardSavedSession = () => {
+    if (window.confirm("क्या आप सहेजे गए अधूरे टेस्ट को हटाना चाहते हैं?")) {
+      try {
+        localStorage.removeItem(DAILY_PRACTICE_PROGRESS_KEY);
+        setSavedSession(null);
+      } catch (e) {
+        console.error("Error clearing saved session:", e);
+      }
+    }
+  };
+
   const handleExitSet = () => {
     if (!isFinished) {
-      if (confirm("क्या आप टेस्ट छोड़ना चाहते हैं? आपकी प्रगति सुरक्षित नहीं होगी।")) {
+      if (confirm("क्या आप टेस्ट से बाहर जाना चाहते हैं?\n\nआपकी प्रगति (हल किए गए प्रश्न व समय) सुरक्षित कर ली गई है। आप इसे बाद में कभी भी 'Resume' कर सकते हैं।")) {
         setActiveSet(null);
+        checkSavedSession();
         if (selectedCategory) {
           window.history.pushState(
             { tab: 'daily-practice', category: selectedCategory, view: 'daily-category' }, 
@@ -264,6 +396,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
     } else {
       setActiveSet(null);
       setIsFinished(false);
+      checkSavedSession();
       if (selectedCategory) {
         window.history.pushState(
           { tab: 'daily-practice', category: selectedCategory, view: 'daily-category' }, 
@@ -286,6 +419,16 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
 
   const handleFinishPractice = () => {
     setIsFinished(true);
+    setShowSubmitModal(false);
+
+    // Clear saved session from storage upon completion
+    try {
+      localStorage.removeItem(DAILY_PRACTICE_PROGRESS_KEY);
+      setSavedSession(null);
+    } catch (e) {
+      console.error("Error removing saved session:", e);
+    }
+
     // Show all explanations on review
     const allExp: Record<number, boolean> = {};
     if (activeSet && Array.isArray(activeSet.questions)) {
@@ -411,21 +554,90 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
             </div>
 
             {!isFinished && (
-              <button
-                onClick={() => setInstantMode(!instantMode)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
-                  instantMode 
-                    ? 'bg-amber-50 text-amber-800 border-amber-300' 
-                    : 'bg-gray-100 text-gray-700 border-gray-300'
-                }`}
-                title="तुरंत उत्तर व व्याख्या देखने के लिए टॉगल करें"
-              >
-                <Zap className={`h-3.5 w-3.5 ${instantMode ? 'text-amber-500 fill-amber-400' : 'text-gray-400'}`} />
-                {instantMode ? 'तत्काल व्याख्या चालू' : 'टेस्ट मोड'}
-              </button>
+              <>
+                <button
+                  onClick={() => setInstantMode(!instantMode)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
+                    instantMode 
+                      ? 'bg-amber-50 text-amber-800 border-amber-300' 
+                      : 'bg-gray-100 text-gray-700 border-gray-300'
+                  }`}
+                  title="तुरंत उत्तर व व्याख्या देखने के लिए टॉगल करें"
+                >
+                  <Zap className={`h-3.5 w-3.5 ${instantMode ? 'text-amber-500 fill-amber-400' : 'text-gray-400'}`} />
+                  {instantMode ? 'तत्काल व्याख्या चालू' : 'टेस्ट मोड'}
+                </button>
+
+                <button
+                  onClick={() => setShowSubmitModal(true)}
+                  className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer border border-amber-600/30"
+                  title="क्विज़ समाप्त करें और स्कोरकार्ड देखें"
+                >
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  <span>सबमिट करें</span>
+                </button>
+              </>
             )}
           </div>
         </div>
+
+        {/* Submit Confirmation Modal */}
+        {showSubmitModal && !isFinished && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-5 animate-scaleUp">
+              <div className="flex items-center gap-3.5">
+                <div className="h-12 w-12 rounded-2xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                  <CheckCircle className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-gray-900">क्विज़ सबमिट करना चाहते हैं?</h3>
+                  <p className="text-xs text-gray-500 font-medium">सबमिट करने के बाद आपका स्कोरकार्ड व सभी प्रश्नों की व्याख्या दिखेगी।</p>
+                </div>
+              </div>
+
+              {/* Status Summary */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                  <p className="text-[10px] text-gray-500 font-bold uppercase">कुल प्रश्न</p>
+                  <p className="text-lg font-black text-gray-900">{questions.length}</p>
+                </div>
+                <div className="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200/50">
+                  <p className="text-[10px] text-emerald-700 font-bold uppercase">हल किए (Answered)</p>
+                  <p className="text-lg font-black text-emerald-700">{Object.keys(selectedAnswers).length}</p>
+                </div>
+                <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/50">
+                  <p className="text-[10px] text-amber-700 font-bold uppercase">छूटे हुए (Left)</p>
+                  <p className="text-lg font-black text-amber-700">{Math.max(0, questions.length - Object.keys(selectedAnswers).length)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-gray-600 bg-gray-50 px-3.5 py-2 rounded-xl border border-gray-200 font-medium">
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-emerald-600" /> समय लिया गया:
+                </span>
+                <span className="font-bold text-gray-900">{formatTime(timerSeconds)}</span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSubmitModal(false)}
+                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                >
+                  नहीं, टेस्ट जारी रखें
+                </button>
+                <button
+                  type="button"
+                  onClick={handleFinishPractice}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle className="h-4 w-4" /> हाँ, सबमिट करें
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Finished Result Banner */}
         {isFinished && (
@@ -672,7 +884,7 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
             )}
 
             {/* Bottom Controls */}
-            <div className="flex items-center justify-between pt-4 border-t border-gray-100 gap-2">
+            <div className="flex flex-wrap items-center justify-between pt-4 border-t border-gray-100 gap-2">
               <button
                 disabled={currentIndex === 0}
                 onClick={() => setCurrentIndex(prev => prev - 1)}
@@ -681,11 +893,20 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
                 <ArrowLeft className="h-4 w-4" /> पिछला प्रश्न
               </button>
 
+              {!isFinished && (
+                <button
+                  onClick={() => setShowSubmitModal(true)}
+                  className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs border border-amber-600/30"
+                >
+                  <CheckCircle className="h-4 w-4" /> सबमिट करें (Submit Test)
+                </button>
+              )}
+
               {!isFinished ? (
                 currentIndex === questions.length - 1 ? (
                   <button
-                    onClick={handleFinishPractice}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-2.5 rounded-xl text-xs transition flex items-center gap-2 cursor-pointer shadow-xs"
+                    onClick={() => setShowSubmitModal(true)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 sm:px-6 py-2.5 rounded-xl text-xs transition flex items-center gap-2 cursor-pointer shadow-xs"
                   >
                     <CheckCircle className="h-4 w-4" /> प्रैक्टिस समाप्त करें
                   </button>
@@ -780,6 +1001,49 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
           </div>
         </div>
       </div>
+
+      {/* RESUME INCOMPLETE TEST BANNER (If a saved session exists) */}
+      {savedSession && (
+        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-emerald-700 text-white rounded-3xl p-5 sm:p-6 shadow-xl border-2 border-amber-300/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden animate-fadeIn">
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/30 text-amber-100 shadow-inner">
+              <RotateCcw className="h-6 w-6 animate-spin-slow" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="bg-white/25 text-white font-black text-[10px] uppercase px-2.5 py-0.5 rounded-full tracking-wider border border-white/40">
+                  अधूरा टेस्ट सहेजा गया है (Unfinished Test)
+                </span>
+                <span className="text-[11px] text-amber-100 font-bold bg-black/20 px-2 py-0.5 rounded-md">
+                  दिनांक: {savedSession.setDate}
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-extrabold text-white leading-snug">
+                {savedSession.setTitle}
+              </h3>
+              <p className="text-xs text-amber-100 font-medium">
+                हल किए गए प्रश्न: <b className="text-white font-extrabold">{Object.keys(savedSession.selectedAnswers || {}).length}</b> | समय लिया: <b className="text-white font-extrabold">{formatTime(savedSession.timerSeconds || 0)}</b>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 w-full md:w-auto justify-end relative z-10 pt-2 md:pt-0 border-t md:border-t-0 border-white/20">
+            <button
+              onClick={handleDiscardSavedSession}
+              className="px-3.5 py-2.5 bg-black/25 hover:bg-black/40 text-amber-100 hover:text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-white/20"
+              title="सहेजे गए टेस्ट को हटाएं"
+            >
+              <Trash2 className="h-4 w-4" /> हटाएं
+            </button>
+            <button
+              onClick={() => handleResumeSession(savedSession)}
+              className="flex-1 md:flex-none px-5 py-2.5 bg-white hover:bg-amber-50 text-slate-900 font-extrabold rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer transform hover:scale-105 active:scale-95"
+            >
+              <Play className="h-4 w-4 fill-slate-900 text-slate-900" /> टेस्ट जारी रखें (Resume Test)
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* VIEW 1: CATEGORY CARDS VIEW (When no category is selected) */}
       {!selectedCategory && (
@@ -975,20 +1239,33 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {filteredSets.map((set, idx) => {
                   const qCount = set.questions?.length || 0;
+                  const isSavedForThisSet = savedSession && (savedSession.setId === set.id || savedSession.setDate === set.date);
+                  const savedAnsweredCount = isSavedForThisSet ? Object.keys(savedSession?.selectedAnswers || {}).length : 0;
 
                   return (
                     <div 
                       key={set.id}
-                      className="bg-white rounded-2xl border border-gray-200 p-5 hover:shadow-md transition space-y-4 flex flex-col justify-between group hover:border-emerald-300"
+                      className={`bg-white rounded-2xl border p-5 hover:shadow-md transition space-y-4 flex flex-col justify-between group ${
+                        isSavedForThisSet 
+                          ? 'border-amber-300 ring-2 ring-amber-400/20 bg-amber-50/20' 
+                          : 'border-gray-200 hover:border-emerald-300'
+                      }`}
                     >
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-xs font-extrabold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200 flex items-center gap-1.5">
                             <Calendar className="h-3.5 w-3.5 text-emerald-600" /> {set.date}
                           </span>
-                          <span className="text-[11px] font-extrabold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">
-                            {set.category || set.subject || 'सामान्य'}
-                          </span>
+                          
+                          {isSavedForThisSet ? (
+                            <span className="text-[11px] font-extrabold text-amber-900 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300 flex items-center gap-1 animate-pulse">
+                              <RotateCcw className="h-3 w-3 text-amber-700" /> प्रगति सहेजी गई ({savedAnsweredCount}/{qCount})
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-extrabold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">
+                              {set.category || set.subject || 'सामान्य'}
+                            </span>
+                          )}
                         </div>
 
                         <h3 className="text-base font-extrabold text-gray-900 group-hover:text-emerald-700 transition leading-snug pt-1">
@@ -1008,12 +1285,21 @@ function DailyPracticeContent({ onBackToHome }: DailyPracticeProps) {
                           <span>{set.durationMinutes || 20} मिनट</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleStartSet(set)}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs group-hover:bg-emerald-700"
-                          >
-                            <Zap className="h-4 w-4 text-amber-300" /> प्रैक्टिस शुरू करें (Start Practice)
-                          </button>
+                          {isSavedForThisSet ? (
+                            <button
+                              onClick={() => handleResumeSession(savedSession)}
+                              className="flex-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                            >
+                              <Play className="h-4 w-4 fill-white" /> टेस्ट जारी रखें (Resume Practice)
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleStartSet(set)}
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs group-hover:bg-emerald-700"
+                            >
+                              <Zap className="h-4 w-4 text-amber-300" /> प्रैक्टिस शुरू करें (Start Practice)
+                            </button>
+                          )}
                           <button
                             onClick={() => setShareConfig({
                               type: 'daily',
