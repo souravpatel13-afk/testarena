@@ -343,25 +343,31 @@ export default function AdminAnalyticsStats() {
               </div>
 
               <div className="space-y-3">
-                {stats.popularTests.map((t, i) => (
-                  <div key={t.id} className="p-3.5 rounded-2xl border border-gray-100 bg-slate-50/60 hover:bg-emerald-50/50 hover:border-emerald-200 transition flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="h-7 w-7 rounded-xl bg-amber-100 text-amber-900 font-black text-xs flex items-center justify-center shrink-0">
-                        {i + 1}
-                      </span>
-                      <div>
-                        <h4 className="text-xs font-extrabold text-gray-900 leading-snug line-clamp-1">{t.title}</h4>
-                        <span className="text-[10px] font-bold text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-200 mt-1 inline-block">
-                          {t.type}
+                {stats.popularTests.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-gray-400 font-medium">
+                    अभी तक कोई टेस्ट अटेम्प्ट दर्ज नहीं हुआ है। छात्रों द्वारा टेस्ट पूरा करने पर यहाँ रैंकिंग दिखेगी।
+                  </div>
+                ) : (
+                  stats.popularTests.map((t, i) => (
+                    <div key={t.id} className="p-3.5 rounded-2xl border border-gray-100 bg-slate-50/60 hover:bg-emerald-50/50 hover:border-emerald-200 transition flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="h-7 w-7 rounded-xl bg-amber-100 text-amber-900 font-black text-xs flex items-center justify-center shrink-0">
+                          {i + 1}
                         </span>
+                        <div>
+                          <h4 className="text-xs font-extrabold text-gray-900 leading-snug line-clamp-1">{t.title}</h4>
+                          <span className="text-[10px] font-bold text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-200 mt-1 inline-block">
+                            {t.type}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-black text-emerald-700">{t.attempts} अटेम्प्ट्स</p>
+                        <p className="text-[10px] font-bold text-gray-500">औसत: {t.avgScore}%</p>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs font-black text-emerald-700">{t.attempts} अटेम्प्ट्स</p>
-                      <p className="text-[10px] font-bold text-gray-500">औसत: {t.avgScore}%</p>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -378,22 +384,28 @@ export default function AdminAnalyticsStats() {
               </div>
 
               <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
-                {stats.recentActivity.map((act, i) => (
-                  <div key={i} className="p-3 rounded-2xl bg-gray-50/80 border border-gray-100 flex items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-ping"></div>
-                      <div>
-                        <span className="font-extrabold text-gray-900 block leading-tight">{act.label}</span>
-                        <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1.5 mt-0.5">
-                          <span>{act.device === 'mobile' ? '📱 Mobile' : '💻 Desktop'}</span> • <span>{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </span>
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-black text-amber-700 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200 shrink-0">
-                      ⏱️ {formatShortTime(act.durationSeconds)}
-                    </span>
+                {stats.recentActivity.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-gray-400 font-medium">
+                    कोई हालिया गतिविधि नहीं। छात्र जैसे ही वेबसाइट पर आएंगे, उनका लाइव टाइम यहाँ दिखेगा।
                   </div>
-                ))}
+                ) : (
+                  stats.recentActivity.map((act, i) => (
+                    <div key={i} className="p-3 rounded-2xl bg-gray-50/80 border border-gray-100 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-ping"></div>
+                        <div>
+                          <span className="font-extrabold text-gray-900 block leading-tight">{act.label}</span>
+                          <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1.5 mt-0.5">
+                            <span>{act.device === 'mobile' ? '📱 Mobile' : '💻 Desktop'}</span> • <span>{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-black text-amber-700 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200 shrink-0">
+                        ⏱️ {formatShortTime(act.durationSeconds)}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

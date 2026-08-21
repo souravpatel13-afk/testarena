@@ -205,13 +205,16 @@ export default function App() {
     // Exclude admin panel visits from end-user traffic stats
     if (activeTab === 'admin') return;
 
-    const startTime = Date.now();
+    let startTime = Date.now();
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     const deviceType = isMobile ? 'mobile' : 'desktop';
 
-    const sendEngagement = () => {
-      const durationSeconds = Math.round((Date.now() - startTime) / 1000);
-      if (durationSeconds >= 2) {
+    const sendEngagement = (overrideDuration?: number) => {
+      const durationSeconds = overrideDuration !== undefined 
+        ? overrideDuration 
+        : Math.round((Date.now() - startTime) / 1000);
+
+      if (durationSeconds >= 1) {
         const payload = JSON.stringify({
           tab: activeTab,
           path: `/?tab=${activeTab}`,
@@ -234,10 +237,24 @@ export default function App() {
       }
     };
 
-    window.addEventListener('beforeunload', sendEngagement);
+    // Send initial page visit ping after 1 second so view count is recorded immediately
+    const initialTimer = setTimeout(() => {
+      sendEngagement(1);
+      startTime = Date.now();
+    }, 1000);
+
+    // Periodic Heartbeat every 20 seconds to record continuous reading/practice time
+    const interval = setInterval(() => {
+      sendEngagement(20);
+      startTime = Date.now();
+    }, 20000);
+
+    window.addEventListener('beforeunload', () => sendEngagement());
     return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
       sendEngagement();
-      window.removeEventListener('beforeunload', sendEngagement);
+      window.removeEventListener('beforeunload', () => sendEngagement());
     };
   }, [activeTab]);
 

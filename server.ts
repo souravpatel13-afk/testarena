@@ -1542,14 +1542,14 @@ app.get('/api/admin/engagement-stats', (req, res) => {
     return true;
   });
 
-  // Base fallback stats derived from actual user attempts & content so stats are never blank
-  const tabMetadata: Record<string, { label: string; path: string; icon: string; defaultWeight: number; baseSec: number }> = {
-    'daily-practice': { label: 'डेली प्रैक्टिस (Daily Practice)', path: '/?tab=daily-practice', icon: 'Sparkles', defaultWeight: 35, baseSec: 380 },
-    'current-affairs': { label: 'करंट अफेयर्स (Current Affairs)', path: '/?tab=current-affairs', icon: 'Newspaper', defaultWeight: 22, baseSec: 210 },
-    'pyqs': { label: 'विगत वर्ष प्रश्न (PYQs Exam Bank)', path: '/?tab=pyqs', icon: 'Database', defaultWeight: 18, baseSec: 420 },
-    'subjects': { label: 'विषय-वार क्विज़ (Subject MCQs)', path: '/?tab=subjects', icon: 'BookOpen', defaultWeight: 14, baseSec: 320 },
-    'home': { label: 'होमपेज (Landing & Search)', path: '/', icon: 'Home', defaultWeight: 7, baseSec: 75 },
-    'exam-info': { label: 'परीक्षा विवरण व सिलेबस (About Exam)', path: '/?tab=exam-info', icon: 'GraduationCap', defaultWeight: 4, baseSec: 160 }
+  const tabMetadata: Record<string, { label: string; path: string; icon: string }> = {
+    'daily-practice': { label: 'डेली प्रैक्टिस (Daily Practice)', path: '/?tab=daily-practice', icon: 'Sparkles' },
+    'current-affairs': { label: 'करंट अफेयर्स (Current Affairs)', path: '/?tab=current-affairs', icon: 'Newspaper' },
+    'pyqs': { label: 'विगत वर्ष प्रश्न (PYQs Exam Bank)', path: '/?tab=pyqs', icon: 'Database' },
+    'subjects': { label: 'विषय-वार क्विज़ (Subject MCQs)', path: '/?tab=subjects', icon: 'BookOpen' },
+    'home': { label: 'होमपेज (Landing & Search)', path: '/', icon: 'Home' },
+    'exam-info': { label: 'परीक्षा विवरण व सिलेबस (About Exam)', path: '/?tab=exam-info', icon: 'GraduationCap' },
+    'dashboard': { label: 'विद्यार्थी डैशबोर्ड (Student Dashboard)', path: '/?tab=dashboard', icon: 'User' }
   };
 
   const pageAggregates: Record<string, { views: number; totalDuration: number }> = {};
@@ -1575,38 +1575,30 @@ app.get('/api/admin/engagement-stats', (req, res) => {
     }
   });
 
-  // Blend with attempts data for accurate test metrics
+  // Calculate real metrics from actual database
   const totalAttempts = attempts.length;
   let totalQuestionsAnswered = 0;
   attempts.forEach(a => {
     totalQuestionsAnswered += (a.totalQuestions || 0);
   });
 
-  // Calculate real or baseline views
-  const baseMulti = Math.max(1, totalAttempts * 3);
-  let totalPageViews = 0;
+  let totalPageViews = filteredLogs.length;
   let totalTimeSpent = 0;
 
-  const pageStats = Object.entries(tabMetadata).map(([tabKey, meta]) => {
-    const recorded = pageAggregates[tabKey] || { views: 0, totalDuration: 0 };
-    const simulatedViews = Math.round((baseMulti * meta.defaultWeight) / 10);
-    const finalViews = Math.max(recorded.views, simulatedViews, 1);
-    
-    const avgDuration = recorded.views > 0 
-      ? Math.round(recorded.totalDuration / recorded.views) 
-      : meta.baseSec;
+  const pageStats = Object.entries(pageAggregates).map(([tabKey, recorded]) => {
+    const meta = tabMetadata[tabKey] || { label: tabKey, path: `/?tab=${tabKey}`, icon: 'Compass' };
+    const views = recorded.views;
+    const totalDuration = recorded.totalDuration;
+    const avgDuration = views > 0 ? Math.round(totalDuration / views) : 0;
 
-    const finalTotalDuration = Math.max(recorded.totalDuration, finalViews * avgDuration);
-
-    totalPageViews += finalViews;
-    totalTimeSpent += finalTotalDuration;
+    totalTimeSpent += totalDuration;
 
     return {
       tab: tabKey,
       label: meta.label,
       path: meta.path,
-      views: finalViews,
-      totalDurationSeconds: finalTotalDuration,
+      views: views,
+      totalDurationSeconds: totalDuration,
       avgDurationSeconds: avgDuration,
       sharePercent: 0,
       icon: meta.icon
@@ -1618,47 +1610,38 @@ app.get('/api/admin/engagement-stats', (req, res) => {
     p.sharePercent = totalTimeSpent > 0 ? Math.round((p.totalDurationSeconds / totalTimeSpent) * 100) : 0;
   });
 
-  // Sort pages by time spent descending
+  // Sort pages by views / time spent descending
   pageStats.sort((a, b) => b.totalDurationSeconds - a.totalDurationSeconds);
 
-  // Popular Tests
-  const popularTests = [
-    {
-      id: "test-cg-daily",
-      title: "सहायक शिक्षक भर्ती डेली प्रैक्टिस (विशेष सेट)",
-      type: "Daily Practice",
-      attempts: Math.max(totalAttempts, dpSets.length * 4),
-      avgScore: 78
-    },
-    {
-      id: "test-cg-gk",
-      title: "छत्तीसगढ़ सामान्य ज्ञान (इतिहास, भूगोल, जनजातियां)",
-      type: "Subject Wise",
-      attempts: Math.max(12, Math.round(totalAttempts * 0.7)),
-      avgScore: 72
-    },
-    {
-      id: "test-cg-ca",
-      title: "छत्तीसगढ़ समसामयिकी (Current Affairs 2026)",
-      type: "Current Affairs",
-      attempts: Math.max(9, Math.round(totalAttempts * 0.5)),
-      avgScore: 84
-    },
-    {
-      id: "test-pyq-pre",
-      title: "CGPSC राज्य सेवा प्रारंभिक परीक्षा PYQ (2024-2015)",
-      type: "Previous Year Paper",
-      attempts: Math.max(8, Math.round(totalAttempts * 0.45)),
-      avgScore: 68
+  // Popular Tests dynamically calculated from actual test attempts
+  const testAttemptCounts: Record<string, { title: string; type: string; count: number; totalScore: number }> = {};
+  
+  attempts.forEach((att: any) => {
+    const title = att.title || att.quizTitle || att.testTitle || 'अभ्यास क्विज़';
+    const type = att.type === 'pyq' ? 'PYQ Exam Paper' : att.type === 'dailyPractice' ? 'Daily Practice' : 'Subject Quiz';
+    const key = title;
+    if (!testAttemptCounts[key]) {
+      testAttemptCounts[key] = { title, type, count: 0, totalScore: 0 };
     }
-  ];
+    testAttemptCounts[key].count += 1;
+    const scorePct = att.totalQuestions > 0 ? Math.round(((att.correctCount || 0) / att.totalQuestions) * 100) : (att.score || 0);
+    testAttemptCounts[key].totalScore += scorePct;
+  });
 
-  const totalDev = (mobileCount + desktopCount) || 1;
-  const mobPercent = mobileCount > 0 ? Math.round((mobileCount / totalDev) * 100) : 88;
-  const deskPercent = 100 - mobPercent;
+  const popularTests = Object.entries(testAttemptCounts).map(([key, data], idx) => ({
+    id: `test-real-${idx}`,
+    title: data.title,
+    type: data.type,
+    attempts: data.count,
+    avgScore: data.count > 0 ? Math.round(data.totalScore / data.count) : 0
+  })).sort((a, b) => b.attempts - a.attempts).slice(0, 5);
 
-  // Recent activity sample
-  const recentActivity = filteredLogs.slice(-10).reverse().map(l => ({
+  const totalDev = (mobileCount + desktopCount);
+  const mobPercent = totalDev > 0 ? Math.round((mobileCount / totalDev) * 100) : 0;
+  const deskPercent = totalDev > 0 ? (100 - mobPercent) : 0;
+
+  // Real recent activity from logs
+  const recentActivity = filteredLogs.slice(-15).reverse().map(l => ({
     tab: l.tab,
     label: tabMetadata[l.tab]?.label || l.tab,
     durationSeconds: l.durationSeconds,
@@ -1666,22 +1649,14 @@ app.get('/api/admin/engagement-stats', (req, res) => {
     timestamp: l.timestamp
   }));
 
-  if (recentActivity.length === 0) {
-    recentActivity.push(
-      { tab: 'daily-practice', label: 'सहायक शिक्षक डेली प्रैक्टिस सेट', durationSeconds: 420, device: 'mobile', timestamp: new Date().toISOString() },
-      { tab: 'current-affairs', label: 'छत्तीसगढ़ मासिक करंट अफेयर्स', durationSeconds: 180, device: 'mobile', timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString() },
-      { tab: 'pyqs', label: 'विगत वर्ष प्रश्न (PYQ Bank)', durationSeconds: 310, device: 'desktop', timestamp: new Date(Date.now() - 12 * 60 * 1000).toISOString() }
-    );
-  }
-
   res.json({
     summary: {
       totalPageViews,
-      totalActiveSessions: Math.max(1, Math.round(totalPageViews / 2.8)),
+      totalActiveSessions: totalPageViews > 0 ? Math.max(1, Math.round(totalPageViews / 2.5)) : 0,
       totalTimeSpentSeconds: totalTimeSpent,
-      avgTimePerSessionSeconds: totalPageViews > 0 ? Math.round(totalTimeSpent / totalPageViews) : 240,
-      totalQuizzesAttempted: Math.max(totalAttempts, 1),
-      totalQuestionsAnswered: Math.max(totalQuestionsAnswered, questions.length)
+      avgTimePerSessionSeconds: totalPageViews > 0 ? Math.round(totalTimeSpent / totalPageViews) : 0,
+      totalQuizzesAttempted: totalAttempts,
+      totalQuestionsAnswered: totalQuestionsAnswered
     },
     deviceBreakdown: {
       mobile: mobPercent,
