@@ -55,12 +55,15 @@ import {
   Wand2,
   Layers,
   Settings2,
-  Code2
+  Code2,
+  BarChart3,
+  Users
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Question, ExamInfo, DailyPracticeSet, DailyPracticeQuestion, DailyPracticeCategory } from '../types';
 import { parseCorrectAnswer } from '../utils/quizHelpers';
 import { RichTextRenderer } from './RichTextRenderer';
+import AdminAnalyticsStats from './AdminAnalyticsStats';
 import { auth, googleSignIn, logout, getAccessToken, setAccessToken } from '../lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
@@ -132,7 +135,12 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [sheetPullingType, setSheetPullingType] = useState<'pyq' | 'subject' | 'currentAffairs' | null>(null);
 
   // Navigation tabs for Admin
-  const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'excel' | 'manual' | 'list' | 'currentAffairs' | 'aboutExam' | 'proofread' | 'dailyPractice' | 'subjectWise' | 'pyq'>('dailyPractice');
+  const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'excel' | 'manual' | 'list' | 'currentAffairs' | 'aboutExam' | 'proofread' | 'dailyPractice' | 'subjectWise' | 'pyq' | 'analytics' | 'studentLeads'>('dailyPractice');
+
+  // Student Leads & Feedbacks State
+  const [subscribers, setSubscribers] = useState<any[]>([]);
+  const [feedbacks, setFeedbacks] = useState<any[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState(false);
   
   // Google Apps Script Webhook State
   const [googleAppsScriptUrl, setGoogleAppsScriptUrl] = useState<string>('');
@@ -1135,9 +1143,32 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     fetchExams();
     fetchDailyPractice();
     fetchDpCategories();
+    fetchStudentLeads();
 
     return () => unsubscribe();
   }, []);
+
+  const fetchStudentLeads = async () => {
+    setLoadingLeads(true);
+    try {
+      const [subRes, fbRes] = await Promise.all([
+        fetch('/api/admin/students/subscribers'),
+        fetch('/api/admin/feedbacks')
+      ]);
+      if (subRes.ok) {
+        const subData = await subRes.json();
+        setSubscribers(subData);
+      }
+      if (fbRes.ok) {
+        const fbData = await fbRes.json();
+        setFeedbacks(fbData);
+      }
+    } catch (err) {
+      console.error("Failed to fetch student leads:", err);
+    } finally {
+      setLoadingLeads(false);
+    }
+  };
 
   const fetchCurrentAffairs = async () => {
     try {
@@ -2477,6 +2508,33 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
         >
           <RefreshCw className="h-4 w-4 text-blue-600" />
           🔄 गूगल शीट सिंक
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('analytics')}
+          className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'analytics'
+              ? 'bg-indigo-800 text-white shadow-md ring-2 ring-indigo-300'
+              : 'bg-indigo-50 text-indigo-900 hover:bg-indigo-100 border border-indigo-200'
+          }`}
+        >
+          <BarChart3 className="h-4 w-4 text-indigo-600" />
+          📈 इनबिल्ट यूज़र स्टैट्स व टाइम स्पेंड
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveSubTab('studentLeads');
+            fetchStudentLeads();
+          }}
+          className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'studentLeads'
+              ? 'bg-indigo-700 text-white shadow-md ring-2 ring-indigo-300'
+              : 'bg-indigo-50 text-indigo-900 hover:bg-indigo-100 border border-indigo-200'
+          }`}
+        >
+          <Users className="h-4 w-4 text-indigo-600" />
+          👥 विद्यार्थी संपर्क व फीडबैक ({subscribers.length + feedbacks.length})
         </button>
       </div>
 
@@ -5957,6 +6015,216 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* INBUILT ANALYTICS & USER ENGAGEMENT TAB */}
+        {activeSubTab === 'analytics' && (
+          <AdminAnalyticsStats />
+        )}
+
+        {/* STUDENT LEADS & FEEDBACK TAB */}
+        {activeSubTab === 'studentLeads' && (
+          <div className="space-y-6 animate-fadeIn">
+            {/* Header Banner */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl shadow-xs border border-gray-200">
+              <div>
+                <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
+                  <Users className="h-6 w-6 text-indigo-600" />
+                  विद्यार्थी संपर्क डेटा एवं टेस्ट फीडबैक हब
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  यहाँ उन सभी छात्रों की सूची है जिन्होंने WhatsApp अलर्ट के लिए सब्सक्राइब किया है या टेस्ट का फीडबैक व रेटिंग दी है।
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (subscribers.length === 0) {
+                      alert("डाउनलोड के लिए कोई विद्यार्थी डेटा उपलब्ध नहीं है।");
+                      return;
+                    }
+                    const headers = "ID,Name,Mobile,TargetExam,District,Source,Date\n";
+                    const rows = subscribers.map(s => 
+                      `"${s.id}","${s.name}","${s.mobile}","${s.targetExam || ''}","${s.district || ''}","${s.source || ''}","${new Date(s.createdAt).toLocaleString('hi-IN')}"`
+                    ).join("\n");
+                    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Students_Leads_${new Date().toISOString().slice(0,10)}.csv`;
+                    a.click();
+                  }}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Download className="h-4 w-4" />
+                  Excel / CSV डाउनलोड ({subscribers.length})
+                </button>
+
+                <button
+                  onClick={fetchStudentLeads}
+                  disabled={loadingLeads}
+                  className="px-3 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1"
+                  title="रिफ्रेश करें"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingLeads ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 p-4 rounded-2xl">
+                <div className="text-xs font-bold text-indigo-700">कुल पंजीकृत विद्यार्थी (WhatsApp Leads)</div>
+                <div className="text-2xl font-black text-indigo-950 mt-1">{subscribers.length}</div>
+                <div className="text-[11px] text-indigo-600 mt-0.5">नए टेस्ट/नोटिफिकेशन के लिए सीधे संपर्क योग्य</div>
+              </div>
+              <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 p-4 rounded-2xl">
+                <div className="text-xs font-bold text-amber-700">कुल टेस्ट रेटिंग्स व फीडबैक</div>
+                <div className="text-2xl font-black text-amber-950 mt-1">{feedbacks.length}</div>
+                <div className="text-[11px] text-amber-600 mt-0.5">
+                  औसत रेटिंग: {feedbacks.length > 0 ? (feedbacks.reduce((a, b) => a + (b.rating || 5), 0) / feedbacks.length).toFixed(1) : '5.0'} / 5.0 ⭐
+                </div>
+              </div>
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 p-4 rounded-2xl">
+                <div className="text-xs font-bold text-emerald-700">व्हाट्सएप संपर्क सुविधा</div>
+                <div className="text-sm font-black text-emerald-950 mt-1">1-क्लिक WhatsApp चैट</div>
+                <div className="text-[11px] text-emerald-600 mt-0.5">नंबर पर क्लिक करके सीधे संदेश भेजें</div>
+              </div>
+            </div>
+
+            {/* Main Content Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left 7 Cols: Subscribers Table */}
+              <div className="lg:col-span-7 bg-white rounded-2xl shadow-xs border border-gray-200 p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <h3 className="font-extrabold text-sm text-gray-800 flex items-center gap-2">
+                    <Users className="h-4 w-4 text-indigo-600" />
+                    विद्यार्थी संपर्क सूची ({subscribers.length})
+                  </h3>
+                  <span className="text-xs text-gray-400 font-medium">WhatsApp / Mobile</span>
+                </div>
+
+                {subscribers.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400 text-xs font-medium space-y-2">
+                    <Users className="h-8 w-8 text-gray-300 mx-auto" />
+                    <p>अभी तक किसी छात्र ने संपर्क फॉर्म नहीं भरा है।</p>
+                    <p className="text-[11px] text-gray-400">होमपेज या क्विज़ रिजल्ट पेज पर फॉर्म भरने पर यहाँ दिखेगा।</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100 max-h-[500px] overflow-y-auto pr-1">
+                    {subscribers.map((sub: any) => (
+                      <div key={sub.id} className="py-3 flex items-start justify-between gap-3 hover:bg-gray-50/70 p-2.5 rounded-xl transition">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-gray-900">{sub.name}</span>
+                            {sub.district && (
+                              <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-bold">
+                                {sub.district}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs flex-wrap">
+                            <a
+                              href={`https://wa.me/91${sub.mobile.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`नमस्ते ${sub.name}, CG Exam Portal पर आपका स्वागत है!`)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-black text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1 transition"
+                            >
+                              📱 {sub.mobile}
+                            </a>
+                            <span className="text-gray-600 font-medium bg-gray-100 px-2 py-0.5 rounded text-[11px]">
+                              🎯 {sub.targetExam || 'General'}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-gray-400">
+                            पंजीकरण: {new Date(sub.createdAt).toLocaleString('hi-IN')} ({sub.source || 'Website'})
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={async () => {
+                            if (!confirm("क्या आप इस छात्र का रिकॉर्ड हटाना चाहते हैं?")) return;
+                            await fetch(`/api/admin/students/subscribers/${sub.id}`, { method: 'DELETE' });
+                            fetchStudentLeads();
+                          }}
+                          className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                          title="हटाएं"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Right 5 Cols: Test Feedback & Reviews */}
+              <div className="lg:col-span-5 bg-white rounded-2xl shadow-xs border border-gray-200 p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <h3 className="font-extrabold text-sm text-gray-800 flex items-center gap-2">
+                    <Star className="h-4 w-4 text-amber-500 fill-amber-400" />
+                    प्राप्त टेस्ट रेटिंग्स व फीडबैक ({feedbacks.length})
+                  </h3>
+                  <span className="text-xs text-gray-400 font-medium">Student Reviews</span>
+                </div>
+
+                {feedbacks.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400 text-xs font-medium space-y-2">
+                    <Star className="h-8 w-8 text-gray-300 mx-auto" />
+                    <p>अभी तक कोई टेस्ट फीडबैक प्राप्त नहीं हुआ है।</p>
+                    <p className="text-[11px] text-gray-400">छात्रों द्वारा टेस्ट पूरा करने पर दी गई रेटिंग यहाँ दिखेगी।</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                    {feedbacks.map((fb: any) => (
+                      <div key={fb.id} className="p-3.5 bg-gray-50/80 rounded-xl border border-gray-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            {[...Array(5)].map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`h-3.5 w-3.5 ${
+                                  i < (fb.rating || 5) ? 'text-amber-400 fill-amber-400' : 'text-gray-300'
+                                }`}
+                              />
+                            ))}
+                            <span className="text-xs font-bold text-gray-700 ml-1">{fb.rating}/5</span>
+                          </div>
+                          <span className="text-[10px] text-gray-400 font-medium">
+                            {new Date(fb.createdAt).toLocaleDateString('hi-IN')}
+                          </span>
+                        </div>
+
+                        {fb.comment && (
+                          <p className="text-xs text-gray-800 font-medium bg-white p-2.5 rounded-lg border border-gray-100">
+                            "{fb.comment}"
+                          </p>
+                        )}
+
+                        <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1">
+                          <span className="font-bold text-gray-700">{fb.studentName || 'अनाम परीक्षार्थी'}</span>
+                          <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-bold text-[10px]">
+                            {fb.testTitle || 'टेस्ट'}
+                          </span>
+                        </div>
+                        {fb.studentMobile && (
+                          <div className="text-[11px] text-emerald-700 font-bold">
+                            📱 संपर्क: {fb.studentMobile}
+                          </div>
+                        )}
+                        {fb.scoreInfo && (
+                          <div className="text-[10px] text-gray-400">
+                            स्कोर: {fb.scoreInfo}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

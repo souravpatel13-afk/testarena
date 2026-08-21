@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Compass, 
   Target, 
@@ -12,7 +12,11 @@ import {
   GraduationCap,
   Sparkles,
   Zap,
-  Calendar
+  Calendar,
+  Bell,
+  Send,
+  CheckCircle,
+  X
 } from 'lucide-react';
 import { ExamInfo, Question } from '../types';
 
@@ -32,6 +36,19 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
 
   const uniqueExams = new Set(questions.map(q => q.exam).filter(Boolean));
   const realExamsCount = uniqueExams.size;
+
+  // Student Alert Subscriber State (Check if already registered or dismissed)
+  const [subName, setSubName] = useState(() => localStorage.getItem('cg_student_name') || '');
+  const [subMobile, setSubMobile] = useState(() => localStorage.getItem('cg_student_mobile') || '');
+  const [subExam, setSubExam] = useState(() => localStorage.getItem('cg_student_exam') || 'CGPSC Pre & CG Vyapam');
+  const [subDistrict, setSubDistrict] = useState(() => localStorage.getItem('cg_student_district') || '');
+  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
+  const [leadSuccessMsg, setLeadSuccessMsg] = useState(false);
+  
+  // Smart state: If student already entered number or clicked dismiss, do not disturb them again
+  const [hideAlertBanner, setHideAlertBanner] = useState(() => {
+    return !!localStorage.getItem('cg_student_mobile') || localStorage.getItem('cg_alert_dismissed') === 'true';
+  });
 
   const successPoints = [
     {
@@ -76,6 +93,131 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-12 font-sans fade-in" id="home-view-container">
       
+      {/* 📢 One-Time Student WhatsApp & Exam Alert Banner (Shown only once or until dismissed) */}
+      {!hideAlertBanner && (
+        <div className="bg-gradient-to-r from-emerald-900 via-teal-950 to-slate-950 rounded-3xl p-6 sm:p-7 text-white shadow-xl relative overflow-hidden border border-emerald-500/30 animate-fadeIn">
+          <button
+            onClick={() => {
+              localStorage.setItem('cg_alert_dismissed', 'true');
+              setHideAlertBanner(true);
+            }}
+            className="absolute top-3 right-3 p-1.5 bg-white/10 hover:bg-white/20 text-white/70 hover:text-white rounded-full transition cursor-pointer"
+            title="बंद करें (दोबारा नहीं पूछा जाएगा)"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <div className="lg:col-span-6 space-y-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 border border-emerald-400/30 rounded-full text-[11px] font-black text-emerald-300">
+                <Bell className="h-3.5 w-3.5 animate-bounce" />
+                <span>निःशुल्क परीक्षा अलर्ट सेवा</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">
+                नए टेस्ट व CG परीक्षा नोटिफिकेशन WhatsApp पर पाएं
+              </h2>
+              <p className="text-xs sm:text-sm text-emerald-100/80 leading-relaxed font-sans">
+                CGPSC, शिक्षक, पटवारी व व्यापमं के नए अभ्यास सेट्स व करंट अफेयर्स सीधे पाने के लिए अपना विवरण दर्ज करें (यह केवल एक बार पूछा जाएगा)।
+              </p>
+            </div>
+
+            <div className="lg:col-span-6 bg-white/10 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-white/15">
+              {leadSuccessMsg ? (
+                <div className="py-3 text-center space-y-1">
+                  <CheckCircle className="h-8 w-8 text-emerald-400 mx-auto" />
+                  <h4 className="font-extrabold text-sm text-white">सफलतापूर्वक जुड़ गए हैं!</h4>
+                  <p className="text-xs text-emerald-200">
+                    आपका नंबर सुरक्षित हो गया है। आपको दोबारा यह फॉर्म नहीं दिखेगा।
+                  </p>
+                </div>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!subName.trim() || !subMobile.trim()) {
+                      alert('कृपया अपना नाम और मोबाइल नंबर भरें।');
+                      return;
+                    }
+                    setIsSubmittingLead(true);
+                    try {
+                      localStorage.setItem('cg_student_name', subName);
+                      localStorage.setItem('cg_student_mobile', subMobile);
+                      localStorage.setItem('cg_student_exam', subExam);
+                      if (subDistrict) localStorage.setItem('cg_student_district', subDistrict);
+
+                      await fetch('/api/students/subscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          name: subName,
+                          mobile: subMobile,
+                          targetExam: subExam,
+                          district: subDistrict,
+                          source: 'Home Top Alert Card'
+                        })
+                      });
+                      
+                      setLeadSuccessMsg(true);
+                      setTimeout(() => {
+                        setHideAlertBanner(true);
+                      }, 2500);
+                    } catch (err: any) {
+                      alert('त्रुटि: ' + err.message);
+                    } finally {
+                      setIsSubmittingLead(false);
+                    }
+                  }}
+                  className="space-y-2.5"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      required
+                      placeholder="आपका नाम (Name)*"
+                      value={subName}
+                      onChange={(e) => setSubName(e.target.value)}
+                      className="text-xs px-3 py-2 bg-white/15 border border-white/20 rounded-xl text-white placeholder-emerald-200/60 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                    <input
+                      type="tel"
+                      required
+                      placeholder="WhatsApp नंबर*"
+                      value={subMobile}
+                      onChange={(e) => setSubMobile(e.target.value)}
+                      className="text-xs px-3 py-2 bg-white/15 border border-white/20 rounded-xl text-white placeholder-emerald-200/60 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      placeholder="टारगेट परीक्षा (CGPSC / व्यापम)"
+                      value={subExam}
+                      onChange={(e) => setSubExam(e.target.value)}
+                      className="text-xs px-3 py-2 bg-white/15 border border-white/20 rounded-xl text-white placeholder-emerald-200/60 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                    <input
+                      type="text"
+                      placeholder="जिला (District - Optional)"
+                      value={subDistrict}
+                      onChange={(e) => setSubDistrict(e.target.value)}
+                      className="text-xs px-3 py-2 bg-white/15 border border-white/20 rounded-xl text-white placeholder-emerald-200/60 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingLead}
+                    className="w-full py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {isSubmittingLead ? 'सुरक्षित किया जा रहा है...' : '🚀 निःशुल्क WhatsApp अलर्ट शुरू करें'}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hero Banner in Green Shade matched to Test Arena identity */}
       <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-emerald-800 via-emerald-900 to-teal-950 text-white shadow-2xl p-8 md:p-12 lg:p-16 border border-emerald-700/50">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">

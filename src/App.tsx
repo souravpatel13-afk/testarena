@@ -200,6 +200,47 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [shareModalConfig, mobileMenuOpen, isQuizRunning, activeTab]);
 
+  // Client-side Page Time-Spent & Engagement Beacon Tracker
+  useEffect(() => {
+    // Exclude admin panel visits from end-user traffic stats
+    if (activeTab === 'admin') return;
+
+    const startTime = Date.now();
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    const deviceType = isMobile ? 'mobile' : 'desktop';
+
+    const sendEngagement = () => {
+      const durationSeconds = Math.round((Date.now() - startTime) / 1000);
+      if (durationSeconds >= 2) {
+        const payload = JSON.stringify({
+          tab: activeTab,
+          path: `/?tab=${activeTab}`,
+          durationSeconds,
+          device: deviceType,
+          referrer: document.referrer || '',
+          timestamp: new Date().toISOString()
+        });
+
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/track/engagement', new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch('/api/track/engagement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true
+          }).catch(() => {});
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', sendEngagement);
+    return () => {
+      sendEngagement();
+      window.removeEventListener('beforeunload', sendEngagement);
+    };
+  }, [activeTab]);
+
   const handleStartQuiz = (quizId: string) => {
     const selected = quizzes.find(q => q.id === quizId);
     if (selected) {
