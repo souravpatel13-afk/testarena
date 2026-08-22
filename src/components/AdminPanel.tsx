@@ -57,7 +57,10 @@ import {
   Settings2,
   Code2,
   BarChart3,
-  Users
+  Users,
+  CheckSquare,
+  Square,
+  X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Question, ExamInfo, DailyPracticeSet, DailyPracticeQuestion, DailyPracticeCategory } from '../types';
@@ -153,7 +156,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [subSubject, setSubSubject] = useState('छत्तीसगढ़ सामान्य ज्ञान');
   const [subCustomSubject, setSubCustomSubject] = useState('');
   const [subTopic, setSubTopic] = useState('सामान्य परिचय एवं इतिहास');
-  const [subInputMode, setSubInputMode] = useState<'bulkHtml' | 'manual' | 'importDp'>('bulkHtml');
+  const [subInputMode, setSubInputMode] = useState<'bulkHtml' | 'manual' | 'importDp' | 'searchDelete'>('bulkHtml');
   const [subBulkHtmlText, setSubBulkHtmlText] = useState<string>('');
   const [subParsedQuestions, setSubParsedQuestions] = useState<Question[]>([]);
   const [subSuccessMsg, setSubSuccessMsg] = useState<string | null>(null);
@@ -167,6 +170,19 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [subSingleExplanationHi, setSubSingleExplanationHi] = useState('');
   const [subDpImportSetId, setSubDpImportSetId] = useState<string>('');
   const [subDpImportLoading, setSubDpImportLoading] = useState<boolean>(false);
+
+  // Subject-Wise Keyword Search & Bulk Delete States
+  const [kwSearchQuery, setKwSearchQuery] = useState<string>('');
+  const [kwSearchSubject, setKwSearchSubject] = useState<string>('all');
+  const [kwSearchTopic, setKwSearchTopic] = useState<string>('all');
+  const [kwSearchScope, setKwSearchScope] = useState<'all' | 'text' | 'topic' | 'explanation'>('all');
+  const [kwSelectedIds, setKwSelectedIds] = useState<Set<string>>(new Set());
+  const [kwDeleting, setKwDeleting] = useState<boolean>(false);
+  const [kwExpandedId, setKwExpandedId] = useState<string | null>(null);
+  const [kwModalConfirm, setKwModalConfirm] = useState<{ open: boolean; type: 'allKeyword' | 'selected' | 'single'; keyword?: string; count: number; ids?: string[] } | null>(null);
+
+  // List tab multi-selection state
+  const [listSelectedIds, setListSelectedIds] = useState<Set<string>>(new Set());
 
   // PYQ HTML Bulk & Manual Question States
   const [pyqExam, setPyqExam] = useState('CGPSC Prelims');
@@ -2432,6 +2448,179 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     }
   };
 
+  // Keyword Bulk Delete Handler for Subject-Wise / General Questions
+  const handleDeleteByKeyword = async (keywordToDel: string, subjectToFilter: string, onlySubWise: boolean) => {
+    const trimmedKw = keywordToDel.trim();
+    if (!trimmedKw) {
+      alert("कृपया डिलीट करने हेतु शब्द / कीवर्ड दर्ज करें।");
+      return;
+    }
+    setKwDeleting(true);
+    try {
+      const res = await fetch('/api/questions/delete-by-keyword', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyword: trimmedKw,
+          subject: subjectToFilter !== 'all' ? subjectToFilter : undefined,
+          topic: kwSearchTopic !== 'all' ? kwSearchTopic : undefined,
+          onlySubjectWise: onlySubWise,
+          matchField: kwSearchScope
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSubSuccessMsg(`सफलता: ${data.message}`);
+        setKwSearchQuery('');
+        setKwSelectedIds(new Set());
+        setKwModalConfirm(null);
+        if (onRefreshQuestions) onRefreshQuestions();
+      } else {
+        alert("डिलीट करने में विफलता: " + (data.error || "अज्ञात त्रुटि"));
+      }
+    } catch (err: any) {
+      alert("सर्वर त्रुटि: " + err.message);
+    } finally {
+      setKwDeleting(false);
+    }
+  };
+
+  // Batch Delete Selected IDs Handler
+  const handleBulkDeleteSelectedIds = async (idsArray: string[]) => {
+    if (idsArray.length === 0) {
+      alert("कृपया कम से कम एक प्रश्न चुनें।");
+      return;
+    }
+    if (!confirm(`क्या आप वाकई चयनित ${idsArray.length} प्रश्नों को हमेशा के लिए डिलीट करना चाहते हैं?\n\nयह क्रिया वापस नहीं ली जा सकती!`)) {
+      return;
+    }
+    setKwDeleting(true);
+    try {
+      const res = await fetch('/api/questions/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: idsArray })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSubSuccessMsg(`सफलता: ${data.message}`);
+        setKwSelectedIds(new Set());
+        setListSelectedIds(new Set());
+        setKwModalConfirm(null);
+        if (onRefreshQuestions) onRefreshQuestions();
+      } else {
+        alert("डिलीट करने में विफलता: " + (data.error || "अज्ञात त्रुटि"));
+      }
+    } catch (err: any) {
+      alert("सर्वर त्रुटि: " + err.message);
+    } finally {
+      setKwDeleting(false);
+    }
+  };
+
+  // Helper to highlight matching keyword in text
+  const renderHighlightedText = (text: string, keyword: string) => {
+    if (!keyword || !keyword.trim() || !text) return text;
+    try {
+      const escaped = keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${escaped})`, 'gi');
+      const parts = text.split(regex);
+      return parts.map((part, i) =>
+        part.toLowerCase() === keyword.trim().toLowerCase() ? (
+          <mark key={i} className="bg-amber-300 text-slate-900 font-extrabold px-1 rounded-xs">
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      );
+    } catch (e) {
+      return text;
+    }
+  };
+
+  // Subject-wise existing subjects list with question counts
+  const existingSubjectWiseSubjects = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    questions.forEach(q => {
+      if (!q.exam || q.exam.trim() === '') {
+        const s = (q.subject || '').trim();
+        if (s) {
+          counts[s] = (counts[s] || 0) + 1;
+        }
+      }
+    });
+    return Object.keys(counts)
+      .sort((a, b) => a.localeCompare(b, 'hi'))
+      .map(name => ({ name, count: counts[name] }));
+  }, [questions]);
+
+  // Subject-wise unique subjects list (names only)
+  const availableSubSubjects = React.useMemo(() => {
+    return existingSubjectWiseSubjects.map(s => s.name);
+  }, [existingSubjectWiseSubjects]);
+
+  // Helper to get existing topics for any given subject
+  const getTopicsForSubject = React.useCallback((subjectName: string) => {
+    if (!subjectName || subjectName === '__custom__') return [];
+    const tops = new Set<string>();
+    questions.forEach(q => {
+      if (!q.exam || q.exam.trim() === '') {
+        if (q.subject === subjectName && q.topic && q.topic.trim()) {
+          tops.add(q.topic.trim());
+        }
+      }
+    });
+    return Array.from(tops).sort((a, b) => a.localeCompare(b, 'hi'));
+  }, [questions]);
+
+  // Subject-wise unique topics for the selected subject
+  const availableSubTopics = React.useMemo(() => {
+    const tops = new Set<string>();
+    questions.forEach(q => {
+      if (!q.exam || q.exam.trim() === '') {
+        if (kwSearchSubject === 'all' || q.subject === kwSearchSubject) {
+          if (q.topic && q.topic.trim()) tops.add(q.topic.trim());
+        }
+      }
+    });
+    return Array.from(tops).sort();
+  }, [questions, kwSearchSubject]);
+
+  // Subject-Wise questions matched by keyword search
+  const matchedSubjectQuestions = React.useMemo(() => {
+    const term = kwSearchQuery.trim().toLowerCase();
+    return questions.filter(q => {
+      // Must be Subject-wise (no exam tag)
+      if (q.exam && q.exam.trim() !== '') return false;
+
+      // Subject filter
+      if (kwSearchSubject !== 'all' && q.subject !== kwSearchSubject) return false;
+
+      // Topic filter
+      if (kwSearchTopic !== 'all' && kwSearchTopic.trim() && q.topic !== kwSearchTopic) return false;
+
+      // Keyword filter
+      if (!term) return true;
+
+      const text = (q.text_hi || '').toLowerCase();
+      const topicText = (q.topic || '').toLowerCase();
+      const subText = (q.subject || '').toLowerCase();
+      const exp = (q.explanation_hi || '').toLowerCase();
+      const opts = Array.isArray(q.options_hi) ? q.options_hi.join(' ').toLowerCase() : '';
+
+      if (kwSearchScope === 'text') {
+        return text.includes(term);
+      } else if (kwSearchScope === 'topic') {
+        return topicText.includes(term);
+      } else if (kwSearchScope === 'explanation') {
+        return exp.includes(term);
+      } else {
+        return text.includes(term) || topicText.includes(term) || subText.includes(term) || exp.includes(term) || opts.includes(term);
+      }
+    });
+  }, [questions, kwSearchQuery, kwSearchSubject, kwSearchTopic, kwSearchScope]);
+
   const filteredQuestions = questions.filter(q => 
     q.text_hi.toLowerCase().includes(searchQuery.toLowerCase()) ||
     q.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -3320,30 +3509,40 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                       </label>
                       <select
                         value={dpSyncSubject}
-                        onChange={(e) => setDpSyncSubject(e.target.value)}
-                        className="w-full p-2 text-xs font-bold bg-white border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDpSyncSubject(val);
+                          if (val !== '__custom__' && val) {
+                            const tops = getTopicsForSubject(val);
+                            if (tops.length > 0 && !dpSyncTopic) {
+                              setDpSyncTopic(tops[0]);
+                            }
+                          }
+                        }}
+                        className="w-full p-2.5 text-xs font-bold bg-white border-2 border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500 shadow-xs"
                       >
-                        <option value="छत्तीसगढ़ सामान्य ज्ञान">छत्तीसगढ़ सामान्य ज्ञान (CG GK)</option>
-                        <option value="भारतीय इतिहास एवं स्वतंत्रता आंदोलन">भारतीय इतिहास (Indian History)</option>
-                        <option value="भारतीय संविधान एवं राजव्यवस्था">भारतीय संविधान एवं राजव्यवस्था (Polity)</option>
-                        <option value="भूगोल (भारत एवं छत्तीसगढ़)">भूगोल - भारत एवं छत्तीसगढ़ (Geography)</option>
-                        <option value="भारतीय अर्थव्यवस्था">भारतीय अर्थव्यवस्था (Indian Economy)</option>
-                        <option value="सामान्य विज्ञान एवं प्रौद्योगिकी">सामान्य विज्ञान एवं प्रौद्योगिकी (General Science)</option>
-                        <option value="भाषा - हिन्दी व छत्तीसगढ़ी">भाषा - हिन्दी व छत्तीसगढ़ी (Language Hindi/CG)</option>
-                        <option value="गणित एवं मानसिक योग्यता">गणित एवं मानसिक योग्यता (Maths & CSAT)</option>
-                        <option value="कंप्यूटर सामान्य ज्ञान">कंप्यूटर सामान्य ज्ञान (Computer GK)</option>
-                        <option value="पर्यावरण एवं पारिस्थितिकी">पर्यावरण एवं पारिस्थितिकी (Environment)</option>
-                        <option value="बाल विकास एवं शिक्षाशास्त्र">बाल विकास एवं शिक्षाशास्त्र (CDP / Pedagogy)</option>
-                        <option value="__custom__">➕ अन्य नया विषय (Custom Subject)...</option>
+                        {existingSubjectWiseSubjects.length > 0 ? (
+                          existingSubjectWiseSubjects.map(sub => (
+                            <option key={sub.name} value={sub.name}>
+                              📚 {sub.name} ({sub.count} प्रश्न पहले से उपलब्ध)
+                            </option>
+                          ))
+                        ) : (
+                          <option value="छत्तीसगढ़ सामान्य ज्ञान">📚 छत्तीसगढ़ सामान्य ज्ञान</option>
+                        )}
+                        <option value="__custom__">➕ अन्य नया विषय दर्ज करें (Custom Subject)...</option>
                       </select>
                       {dpSyncSubject === '__custom__' && (
-                        <input
-                          type="text"
-                          placeholder="नया विषय का नाम लिखें..."
-                          value={dpCustomSyncSubject}
-                          onChange={(e) => setDpCustomSyncSubject(e.target.value)}
-                          className="w-full mt-1.5 p-2 text-xs font-bold bg-white border border-emerald-400 rounded-xl"
-                        />
+                        <div className="mt-1.5 space-y-1">
+                          <label className="text-[10px] font-extrabold text-emerald-900 block">नया विषय का नाम:*</label>
+                          <input
+                            type="text"
+                            placeholder="नया विषय का नाम लिखें (उदा. कृषि विज्ञान, कंप्यूटर)..."
+                            value={dpCustomSyncSubject}
+                            onChange={(e) => setDpCustomSyncSubject(e.target.value)}
+                            className="w-full p-2 text-xs font-bold bg-white border-2 border-emerald-400 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
                       )}
                     </div>
 
@@ -3358,6 +3557,26 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                         onChange={(e) => setDpSyncTopic(e.target.value)}
                         className="w-full p-2 text-xs font-bold bg-white border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
                       />
+                      {/* Quick suggestions of existing topics for this subject */}
+                      {dpSyncSubject !== '__custom__' && getTopicsForSubject(dpSyncSubject).length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1 pt-1">
+                          <span className="text-[10px] font-bold text-emerald-900">मौजूदा टॉपिक:</span>
+                          {getTopicsForSubject(dpSyncSubject).slice(0, 8).map(top => (
+                            <button
+                              key={top}
+                              type="button"
+                              onClick={() => setDpSyncTopic(top)}
+                              className={`text-[10px] px-2 py-0.5 rounded-md border font-semibold cursor-pointer transition ${
+                                dpSyncTopic === top
+                                  ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                              }`}
+                            >
+                              {top}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <p className="text-[10px] text-emerald-800 font-medium">खाली छोड़ने पर सेट का शीर्षक ("{dpTitle || 'डेली प्रैक्टिस क्विज'}") उपयोग होगा।</p>
                     </div>
                   </div>
@@ -3528,30 +3747,40 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                       </label>
                       <select
                         value={dpSyncModalSubject}
-                        onChange={(e) => setDpSyncModalSubject(e.target.value)}
-                        className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDpSyncModalSubject(val);
+                          if (val !== '__custom__') {
+                            const tops = getTopicsForSubject(val);
+                            if (tops.length > 0) {
+                              setDpSyncModalTopic(tops[0]);
+                            }
+                          }
+                        }}
+                        className="w-full p-2.5 text-xs font-bold bg-white border border-teal-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white shadow-xs"
                       >
-                        <option value="छत्तीसगढ़ सामान्य ज्ञान">छत्तीसगढ़ सामान्य ज्ञान (CG GK)</option>
-                        <option value="भारतीय इतिहास एवं स्वतंत्रता आंदोलन">भारतीय इतिहास (Indian History)</option>
-                        <option value="भारतीय संविधान एवं राजव्यवस्था">भारतीय संविधान एवं राजव्यवस्था (Polity)</option>
-                        <option value="भूगोल (भारत एवं छत्तीसगढ़)">भूगोल - भारत एवं छत्तीसगढ़ (Geography)</option>
-                        <option value="भारतीय अर्थव्यवस्था">भारतीय अर्थव्यवस्था (Indian Economy)</option>
-                        <option value="सामान्य विज्ञान एवं प्रौद्योगिकी">सामान्य विज्ञान एवं प्रौद्योगिकी (General Science)</option>
-                        <option value="भाषा - हिन्दी व छत्तीसगढ़ी">भाषा - हिन्दी व छत्तीसगढ़ी (Language Hindi/CG)</option>
-                        <option value="गणित एवं मानसिक योग्यता">गणित एवं मानसिक योग्यता (Maths & CSAT)</option>
-                        <option value="कंप्यूटर सामान्य ज्ञान">कंप्यूटर सामान्य ज्ञान (Computer GK)</option>
-                        <option value="पर्यावरण एवं पारिस्थितिकी">पर्यावरण एवं पारिस्थितिकी (Environment)</option>
-                        <option value="बाल विकास एवं शिक्षाशास्त्र">बाल विकास एवं शिक्षाशास्त्र (CDP / Pedagogy)</option>
-                        <option value="__custom__">➕ अन्य नया विषय (Custom Subject)...</option>
+                        {existingSubjectWiseSubjects.length > 0 ? (
+                          existingSubjectWiseSubjects.map(sub => (
+                            <option key={sub.name} value={sub.name}>
+                              📚 {sub.name} ({sub.count} प्रश्न पहले से उपलब्ध)
+                            </option>
+                          ))
+                        ) : (
+                          <option value="छत्तीसगढ़ सामान्य ज्ञान">📚 छत्तीसगढ़ सामान्य ज्ञान</option>
+                        )}
+                        <option value="__custom__">➕ अन्य नया विषय दर्ज करें (Custom Subject)...</option>
                       </select>
                       {dpSyncModalSubject === '__custom__' && (
-                        <input
-                          type="text"
-                          placeholder="नया विषय का नाम दर्ज करें..."
-                          value={dpSyncModalCustomSubject}
-                          onChange={(e) => setDpSyncModalCustomSubject(e.target.value)}
-                          className="w-full mt-2 p-2 text-xs font-bold bg-white border border-teal-400 rounded-xl"
-                        />
+                        <div className="mt-2 space-y-1">
+                          <label className="text-[10px] font-extrabold text-teal-900 block">नया विषय का नाम दर्ज करें:*</label>
+                          <input
+                            type="text"
+                            placeholder="नया विषय का नाम दर्ज करें (उदा. छत्तीसगढ़ी भाषा)..."
+                            value={dpSyncModalCustomSubject}
+                            onChange={(e) => setDpSyncModalCustomSubject(e.target.value)}
+                            className="w-full p-2.5 text-xs font-bold bg-white border-2 border-teal-400 rounded-xl focus:ring-2 focus:ring-teal-500 shadow-xs"
+                          />
+                        </div>
                       )}
                     </div>
 
@@ -3563,9 +3792,29 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                         type="text"
                         value={dpSyncModalTopic}
                         onChange={(e) => setDpSyncModalTopic(e.target.value)}
-                        placeholder="उदा. पर्यावरण अध्ययन या क्विज का नाम"
+                        placeholder={dpSyncModalSet.title || "उदा. पर्यावरण अध्ययन या टॉपिक का नाम"}
                         className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
                       />
+                      {/* Existing topics suggestion chips */}
+                      {dpSyncModalSubject !== '__custom__' && getTopicsForSubject(dpSyncModalSubject).length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-2">
+                          <span className="text-[10px] font-bold text-teal-900">मौजूदा टॉपिक:</span>
+                          {getTopicsForSubject(dpSyncModalSubject).map(top => (
+                            <button
+                              key={top}
+                              type="button"
+                              onClick={() => setDpSyncModalTopic(top)}
+                              className={`text-[10px] px-2 py-0.5 rounded-md border font-semibold cursor-pointer transition ${
+                                dpSyncModalTopic === top
+                                  ? 'bg-teal-700 text-white border-teal-800 shadow-xs'
+                                  : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
+                              }`}
+                            >
+                              {top}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -3661,12 +3910,22 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                 </p>
               </div>
 
-              <div className="bg-white/10 backdrop-blur-xs border border-white/20 px-4 py-3 rounded-2xl text-center self-stretch md:self-auto min-w-[150px]">
-                <span className="text-[11px] font-bold text-teal-200 block uppercase tracking-wider">कुल विषयवार प्रश्न</span>
-                <span className="text-2xl font-black text-white">
-                  {questions.filter(q => !q.exam || q.exam.trim() === '').length}
-                </span>
-                <span className="text-[10px] text-teal-200/80 block mt-0.5">डेटाबेस में सुरक्षित</span>
+              <div className="flex flex-col sm:flex-row items-center gap-2 self-stretch md:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setSubInputMode('searchDelete')}
+                  className="bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-400/30 px-3.5 py-2.5 rounded-2xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Trash2 className="h-4 w-4 text-red-300" />
+                  🔍 कीवर्ड सर्च व बल्क डिलीट
+                </button>
+                <div className="bg-white/10 backdrop-blur-xs border border-white/20 px-4 py-3 rounded-2xl text-center self-stretch md:self-auto min-w-[150px]">
+                  <span className="text-[11px] font-bold text-teal-200 block uppercase tracking-wider">कुल विषयवार प्रश्न</span>
+                  <span className="text-2xl font-black text-white">
+                    {questions.filter(q => !q.exam || q.exam.trim() === '').length}
+                  </span>
+                  <span className="text-[10px] text-teal-200/80 block mt-0.5">डेटाबेस में सुरक्षित</span>
+                </div>
               </div>
             </div>
 
@@ -3702,31 +3961,41 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                   </label>
                   <select
                     value={subSubject}
-                    onChange={(e) => setSubSubject(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSubSubject(val);
+                      if (val !== '__custom__') {
+                        const tops = getTopicsForSubject(val);
+                        if (tops.length > 0) {
+                          setSubTopic(tops[0]);
+                        }
+                      }
+                    }}
                     className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
                   >
-                    <option value="छत्तीसगढ़ सामान्य ज्ञान">छत्तीसगढ़ सामान्य ज्ञान (Chhattisgarh GK)</option>
-                    <option value="भारतीय संविधान एवं राजव्यवस्था">भारतीय संविधान एवं राजव्यवस्था (Indian Polity)</option>
-                    <option value="भारतीय इतिहास">भारतीय इतिहास (Indian History)</option>
-                    <option value="भूगोल (भारत एवं छत्तीसगढ़)">भूगोल - भारत एवं छत्तीसगढ़ (Geography)</option>
-                    <option value="भारतीय अर्थव्यवस्था">भारतीय अर्थव्यवस्था (Indian Economy)</option>
-                    <option value="सामान्य विज्ञान एवं प्रौद्योगिकी">सामान्य विज्ञान एवं प्रौद्योगिकी (General Science)</option>
-                    <option value="भाषा - हिन्दी व छत्तीसगढ़ी">भाषा - हिन्दी व छत्तीसगढ़ी (Language Hindi/CG)</option>
-                    <option value="गणित एवं मानसिक योग्यता">गणित एवं मानसिक योग्यता (Maths & CSAT)</option>
-                    <option value="कंप्यूटर सामान्य ज्ञान">कंप्यूटर सामान्य ज्ञान (Computer GK)</option>
-                    <option value="पर्यावरण एवं पारिस्थितिकी">पर्यावरण एवं पारिस्थितिकी (Environment)</option>
-                    <option value="बाल विकास एवं शिक्षाशास्त्र">बाल विकास एवं शिक्षाशास्त्र (CDP / Pedagogy)</option>
+                    {existingSubjectWiseSubjects.length > 0 ? (
+                      existingSubjectWiseSubjects.map(sub => (
+                        <option key={sub.name} value={sub.name}>
+                          📚 {sub.name} ({sub.count} प्रश्न पहले से मौजूद)
+                        </option>
+                      ))
+                    ) : (
+                      <option value="छत्तीसगढ़ सामान्य ज्ञान">📚 छत्तीसगढ़ सामान्य ज्ञान</option>
+                    )}
                     <option value="__custom__">➕ अन्य नया विषय दर्ज करें (Custom Subject)...</option>
                   </select>
 
                   {subSubject === '__custom__' && (
-                    <input
-                      type="text"
-                      placeholder="नया विषय का नाम लिखें (उदा. कृषि विज्ञान)"
-                      value={subCustomSubject}
-                      onChange={(e) => setSubCustomSubject(e.target.value)}
-                      className="w-full mt-2 p-2.5 text-xs font-bold bg-white border border-teal-400 rounded-xl focus:ring-2 focus:ring-teal-500"
-                    />
+                    <div className="mt-2 space-y-1">
+                      <label className="text-[10px] font-extrabold text-teal-900 block">नया विषय का नाम दर्ज करें:*</label>
+                      <input
+                        type="text"
+                        placeholder="नया विषय का नाम लिखें (उदा. कृषि विज्ञान, अर्थशास्त्र)..."
+                        value={subCustomSubject}
+                        onChange={(e) => setSubCustomSubject(e.target.value)}
+                        className="w-full p-2.5 text-xs font-bold bg-white border-2 border-teal-400 rounded-xl focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
                   )}
                 </div>
 
@@ -3743,17 +4012,37 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                     onChange={(e) => setSubTopic(e.target.value)}
                     className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
                   />
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {["सामान्य परिचय", "इतिहास व संस्कृति", "प्रशासनिक ढांचा", "भौगोलिक परिदृश्य", "प्रमुख तथ्य"].map(tag => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => setSubTopic(tag)}
-                        className="text-[10px] bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-md hover:bg-teal-100 cursor-pointer font-semibold"
-                      >
-                        +{tag}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    {subSubject !== '__custom__' && getTopicsForSubject(subSubject).length > 0 ? (
+                      <>
+                        <span className="text-[10px] font-bold text-gray-500">मौजूदा टॉपिक:</span>
+                        {getTopicsForSubject(subSubject).slice(0, 10).map(tag => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setSubTopic(tag)}
+                            className={`text-[10px] px-2 py-0.5 rounded-md border font-semibold cursor-pointer transition ${
+                              subTopic === tag
+                                ? 'bg-teal-700 text-white border-teal-800 shadow-xs'
+                                : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
+                            }`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      ["सामान्य परिचय", "इतिहास व संस्कृति", "प्रशासनिक ढांचा", "भौगोलिक परिदृश्य", "प्रमुख तथ्य"].map(tag => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setSubTopic(tag)}
+                          className="text-[10px] bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-md hover:bg-teal-100 cursor-pointer font-semibold"
+                        >
+                          +{tag}
+                        </button>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -3797,6 +4086,18 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                   >
                     <PlusCircle className="h-4 w-4" />
                     📝 सिंगल प्रश्न फॉर्म (Manual Form)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSubInputMode('searchDelete')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                      subInputMode === 'searchDelete'
+                        ? 'bg-red-600 text-white shadow-xs ring-2 ring-red-300'
+                        : 'bg-red-50 text-red-800 border border-red-200 hover:bg-red-100'
+                    }`}
+                  >
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                    🗑️ शब्द/कीवर्ड सर्च व बल्क डिलीट
                   </button>
                 </div>
               </div>
@@ -4157,6 +4458,339 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                   </button>
                 </div>
               </form>
+            )}
+
+            {/* KEYWORD SEARCH & BULK DELETE SECTION */}
+            {subInputMode === 'searchDelete' && (
+              <div className="bg-white rounded-3xl border-2 border-red-200 p-6 shadow-sm space-y-6">
+                {/* Header Title */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-red-100">
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center gap-1.5 bg-red-100 text-red-800 px-3 py-0.5 rounded-full text-[11px] font-extrabold">
+                      <Trash2 className="h-3.5 w-3.5 text-red-600" /> बल्क डिलीट टूल (Bulk Delete Tool)
+                    </div>
+                    <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                      🔍 शब्द / कीवर्ड सर्च करके एक साथ प्रश्न डिलीट करें
+                    </h3>
+                    <p className="text-xs text-gray-600 font-medium leading-relaxed max-w-3xl">
+                      यहाँ किसी भी शब्द (जैसे <em>'कालिदास'</em>, <em>'कवर्धा'</em>, <em>'बस्तर'</em>, <em>'1942'</em> आदि) को खोजें। उससे संबंधित सभी प्रश्न तुरंत फिल्टर होकर सामने आ जाएंगे और आप <strong>1-क्लिक में उन सभी को एक साथ डिलीट</strong> कर सकते हैं।
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKwSearchQuery('');
+                      setKwSearchSubject('all');
+                      setKwSearchTopic('all');
+                      setKwSelectedIds(new Set());
+                    }}
+                    className="text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-xl transition flex items-center gap-1 self-start cursor-pointer"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> रीसेट करें
+                  </button>
+                </div>
+
+                {/* Filters Row */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-red-50/40 p-4 rounded-2xl border border-red-100">
+                  {/* Keyword Input */}
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5">
+                      <Search className="h-3.5 w-3.5 text-red-600" />
+                      सर्च शब्द / कीवर्ड लिखें (Search Keyword)*
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="उदा. कालिदास, बस्तर, कवर्धा, डायनामाइट, 1942..."
+                        value={kwSearchQuery}
+                        onChange={(e) => {
+                          setKwSearchQuery(e.target.value);
+                          setKwSelectedIds(new Set());
+                        }}
+                        className="w-full pl-3.5 pr-9 py-2.5 text-xs font-extrabold bg-white border-2 border-red-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 shadow-xs"
+                      />
+                      {kwSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setKwSearchQuery('')}
+                          className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-700 cursor-pointer"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Subject Filter */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5">
+                      <BookOpen className="h-3.5 w-3.5 text-red-600" />
+                      विषय (Subject Filter)
+                    </label>
+                    <select
+                      value={kwSearchSubject}
+                      onChange={(e) => {
+                        setKwSearchSubject(e.target.value);
+                        setKwSearchTopic('all');
+                        setKwSelectedIds(new Set());
+                      }}
+                      className="w-full p-2.5 text-xs font-bold bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500"
+                    >
+                      <option value="all">सभी विषय (All Subjects)</option>
+                      {availableSubSubjects.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Topic Filter */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-red-600" />
+                      टॉपिक (Topic Filter)
+                    </label>
+                    <select
+                      value={kwSearchTopic}
+                      onChange={(e) => {
+                        setKwSearchTopic(e.target.value);
+                        setKwSelectedIds(new Set());
+                      }}
+                      className="w-full p-2.5 text-xs font-bold bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500"
+                    >
+                      <option value="all">सभी टॉपिक्स (All Topics)</option>
+                      {availableSubTopics.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Scope selector & Suggestions */}
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-gray-700 text-xs">खोज का दायरा:</span>
+                    {(['all', 'text', 'topic', 'explanation'] as const).map(sc => (
+                      <button
+                        key={sc}
+                        type="button"
+                        onClick={() => setKwSearchScope(sc)}
+                        className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer ${
+                          kwSearchScope === sc
+                            ? 'bg-red-600 text-white shadow-xs'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {sc === 'all' && 'पूरा प्रश्न व व्याख्या (All)'}
+                        {sc === 'text' && 'केवल प्रश्न (Question Only)'}
+                        {sc === 'topic' && 'केवल टॉपिक (Topic Only)'}
+                        {sc === 'explanation' && 'केवल व्याख्या (Explanation Only)'}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="text-[11px] font-bold text-gray-500">
+                    मिलान परिणाम: <span className="text-red-700 font-extrabold text-xs">{matchedSubjectQuestions.length}</span> प्रश्न
+                  </div>
+                </div>
+
+                {/* Action Bar (Prominent Deletion Buttons) */}
+                <div className="bg-gradient-to-r from-red-50 via-rose-50 to-orange-50 border-2 border-red-300 p-4 rounded-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (kwSelectedIds.size === matchedSubjectQuestions.length) {
+                          setKwSelectedIds(new Set());
+                        } else {
+                          setKwSelectedIds(new Set(matchedSubjectQuestions.map(q => q.id)));
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-xs font-extrabold text-gray-800 bg-white border border-gray-300 hover:border-gray-400 px-3 py-2 rounded-xl transition cursor-pointer shadow-xs"
+                    >
+                      {kwSelectedIds.size === matchedSubjectQuestions.length && matchedSubjectQuestions.length > 0 ? (
+                        <>
+                          <CheckSquare className="h-4 w-4 text-red-600" />
+                          सभी अनचयनित करें
+                        </>
+                      ) : (
+                        <>
+                          <Square className="h-4 w-4 text-gray-400" />
+                          सभी चुनें ({matchedSubjectQuestions.length})
+                        </>
+                      )}
+                    </button>
+
+                    {kwSelectedIds.size > 0 && (
+                      <span className="text-xs font-black text-red-700 bg-red-100 px-2.5 py-1 rounded-lg">
+                        {kwSelectedIds.size} प्रश्न चयनित
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Execution Delete Buttons */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Delete Selected Button */}
+                    <button
+                      type="button"
+                      disabled={kwDeleting || kwSelectedIds.size === 0}
+                      onClick={() => {
+                        const idsArr = Array.from(kwSelectedIds);
+                        setKwModalConfirm({
+                          open: true,
+                          type: 'selected',
+                          count: idsArr.length,
+                          ids: idsArr
+                        });
+                      }}
+                      className="px-4 py-2 rounded-xl text-xs font-extrabold text-red-700 bg-white border-2 border-red-400 hover:bg-red-50 transition cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    >
+                      <Trash className="h-4 w-4" />
+                      चयनित ({kwSelectedIds.size}) डिलीट करें
+                    </button>
+
+                    {/* Delete ALL Matching Keyword Button */}
+                    <button
+                      type="button"
+                      disabled={kwDeleting || matchedSubjectQuestions.length === 0 || !kwSearchQuery.trim()}
+                      onClick={() => {
+                        setKwModalConfirm({
+                          open: true,
+                          type: 'allKeyword',
+                          keyword: kwSearchQuery.trim(),
+                          count: matchedSubjectQuestions.length
+                        });
+                      }}
+                      className="px-5 py-2.5 rounded-xl text-xs font-black text-white bg-red-600 hover:bg-red-700 transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {kwDeleting ? "डिलीट हो रहा है..." : `🚨 '${kwSearchQuery.trim() || "शब्द"}' वाले सभी ${matchedSubjectQuestions.length} प्रश्न एक साथ डिलीट करें`}
+                    </button>
+                  </div>
+                </div>
+
+                {/* List of Matching Questions */}
+                <div className="space-y-3">
+                  {matchedSubjectQuestions.length === 0 ? (
+                    <div className="p-12 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-300 space-y-2">
+                      <Search className="h-8 w-8 text-gray-400 mx-auto" />
+                      <p className="text-xs font-extrabold text-gray-700">
+                        {kwSearchQuery.trim() ? `'${kwSearchQuery}' से संबंधित कोई विषयवार प्रश्न नहीं मिला।` : "कृपया ऊपर किसी शब्द या कीवर्ड को टाइप करें।"}
+                      </p>
+                      <p className="text-[11px] text-gray-500 font-medium">
+                        आप विषय या टॉपिक फिल्टर भी बदल कर देख सकते हैं।
+                      </p>
+                    </div>
+                  ) : (
+                    matchedSubjectQuestions.map((q, idx) => {
+                      const isSelected = kwSelectedIds.has(q.id);
+                      const isExp = kwExpandedId === q.id;
+
+                      return (
+                        <div
+                          key={q.id || idx}
+                          className={`rounded-2xl border-2 transition p-4 space-y-3 ${
+                            isSelected
+                              ? 'bg-red-50/50 border-red-400 shadow-xs'
+                              : 'bg-white border-gray-200 hover:border-red-200'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            {/* Checkbox and Question Body */}
+                            <div className="flex items-start gap-3 flex-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = new Set(kwSelectedIds);
+                                  if (updated.has(q.id)) {
+                                    updated.delete(q.id);
+                                  } else {
+                                    updated.add(q.id);
+                                  }
+                                  setKwSelectedIds(updated);
+                                }}
+                                className="mt-0.5 cursor-pointer text-red-600 hover:opacity-80"
+                              >
+                                {isSelected ? (
+                                  <CheckSquare className="h-5 w-5 text-red-600" />
+                                ) : (
+                                  <Square className="h-5 w-5 text-gray-400" />
+                                )}
+                              </button>
+
+                              <div className="space-y-1.5 flex-1">
+                                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-extrabold">
+                                  <span className="bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-md">
+                                    {renderHighlightedText(q.subject, kwSearchQuery)}
+                                  </span>
+                                  <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-md">
+                                    {renderHighlightedText(q.topic, kwSearchQuery)}
+                                  </span>
+                                  <span className="text-gray-400 font-mono text-[10px]">
+                                    #{idx + 1}
+                                  </span>
+                                </div>
+
+                                <h4 className="text-xs sm:text-sm font-bold text-gray-900 leading-relaxed font-sans">
+                                  {renderHighlightedText(q.text_hi, kwSearchQuery)}
+                                </h4>
+                              </div>
+                            </div>
+
+                            {/* Actions on this question */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setKwExpandedId(isExp ? null : q.id)}
+                                className="text-[11px] font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+                              >
+                                {isExp ? "कम देखें ▴" : "विकल्प देखें ▾"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteQuestion(q.id)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                                title="यह सिंगल प्रश्न डिलीट करें"
+                              >
+                                <Trash className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Options and Explanation Accordion */}
+                          {isExp && (
+                            <div className="pt-3 border-t border-gray-100 space-y-2 bg-gray-50/70 p-3 rounded-xl mt-1 text-xs">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {q.options_hi.map((opt, oIdx) => (
+                                  <div
+                                    key={oIdx}
+                                    className={`p-2 rounded-lg border text-xs ${
+                                      oIdx === q.correctAnswer
+                                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold'
+                                        : 'bg-white border-gray-200 text-gray-700'
+                                    }`}
+                                  >
+                                    <span className="font-mono mr-1">{String.fromCharCode(65 + oIdx)}.</span>
+                                    {renderHighlightedText(opt, kwSearchQuery)}
+                                    {oIdx === q.correctAnswer && ' ✓ (सही उत्तर)'}
+                                  </div>
+                                ))}
+                              </div>
+
+                              {q.explanation_hi && (
+                                <div className="text-xs text-gray-700 bg-amber-50/60 border border-amber-200 p-2.5 rounded-lg mt-1 leading-relaxed">
+                                  <strong className="text-amber-900">💡 व्याख्या: </strong>
+                                  {renderHighlightedText(q.explanation_hi, kwSearchQuery)}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -5991,8 +6625,8 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
         {/* QUESTIONS LIST TAB */}
         {activeSubTab === 'list' && (
           <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+              <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
                   <Search className="h-5 w-5 text-emerald-600" /> प्रश्न सूची प्रबंधक ({questions.length})
                 </h2>
@@ -6000,48 +6634,155 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                   <button
                     type="button"
                     onClick={handleDeleteAllQuestions}
-                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-extrabold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
                     title="डेटाबेस के सभी प्रश्न एक बार में हटाएं"
                   >
                     <Trash2 className="h-3.5 w-3.5" /> सभी प्रश्न डिलीट करें
                   </button>
                 )}
               </div>
-              <div className="relative w-full sm:w-72">
+
+              <div className="relative w-full sm:w-80">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="प्रश्न, विषय या परीक्षा खोजें..."
+                  placeholder="प्रश्न, विषय, टॉपिक या कीवर्ड खोजें..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 pr-4 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full font-medium"
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setListSelectedIds(new Set());
+                  }}
+                  className="pl-9 pr-8 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full font-medium"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setListSelectedIds(new Set());
+                    }}
+                    className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-700 cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Action Bar for Filtered Search */}
+            <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (listSelectedIds.size === filteredQuestions.length && filteredQuestions.length > 0) {
+                      setListSelectedIds(new Set());
+                    } else {
+                      setListSelectedIds(new Set(filteredQuestions.map(q => q.id)));
+                    }
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-extrabold text-gray-700 bg-white border border-gray-300 px-3 py-1.5 rounded-xl transition cursor-pointer hover:bg-gray-100"
+                >
+                  {listSelectedIds.size === filteredQuestions.length && filteredQuestions.length > 0 ? (
+                    <>
+                      <CheckSquare className="h-4 w-4 text-emerald-600" />
+                      सभी अनचयनित करें
+                    </>
+                  ) : (
+                    <>
+                      <Square className="h-4 w-4 text-gray-400" />
+                      सूची के सभी चुनें ({filteredQuestions.length})
+                    </>
+                  )}
+                </button>
+
+                {listSelectedIds.size > 0 && (
+                  <span className="text-xs font-bold text-red-700 bg-red-100 px-2.5 py-1 rounded-lg">
+                    {listSelectedIds.size} चयनित
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {listSelectedIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleBulkDeleteSelectedIds(Array.from(listSelectedIds))}
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Trash className="h-3.5 w-3.5" /> चयनित ({listSelectedIds.size}) डिलीट करें
+                  </button>
+                )}
+
+                {searchQuery.trim() && filteredQuestions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKwModalConfirm({
+                        open: true,
+                        type: 'allKeyword',
+                        keyword: searchQuery.trim(),
+                        count: filteredQuestions.length
+                      });
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-black px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    🚨 '{searchQuery.trim()}' के सभी ({filteredQuestions.length}) प्रश्न एक साथ डिलीट करें
+                  </button>
+                )}
               </div>
             </div>
 
             <div className="space-y-3">
-              {filteredQuestions.map((q) => {
+              {filteredQuestions.map((q, qIndex) => {
                 const isExpanded = expandedQuestion === q.id;
+                const isSelected = listSelectedIds.has(q.id);
                 return (
-                  <div key={q.id} className="border border-gray-200 rounded-xl p-4 bg-white hover:border-emerald-300 transition space-y-2">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1 flex-1 cursor-pointer" onClick={() => setExpandedQuestion(isExpanded ? null : q.id)}>
-                        <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
-                          <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded">
-                            {q.subject}
-                          </span>
-                          <span className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded">
-                            {q.topic}
-                          </span>
-                          {q.exam && (
-                            <span className="bg-purple-50 text-purple-800 px-2 py-0.5 rounded">
-                              {q.exam} {q.year ? `(${q.year})` : ''}
-                            </span>
+                  <div key={q.id || qIndex} className={`border-2 rounded-xl p-4 transition space-y-2 ${isSelected ? 'bg-red-50/40 border-red-300' : 'bg-white border-gray-200 hover:border-emerald-300'}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = new Set(listSelectedIds);
+                            if (updated.has(q.id)) {
+                              updated.delete(q.id);
+                            } else {
+                              updated.add(q.id);
+                            }
+                            setListSelectedIds(updated);
+                          }}
+                          className="mt-0.5 cursor-pointer text-red-600 hover:opacity-80"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="h-5 w-5 text-red-600" />
+                          ) : (
+                            <Square className="h-5 w-5 text-gray-400" />
                           )}
+                        </button>
+
+                        <div className="space-y-1 flex-1 cursor-pointer" onClick={() => setExpandedQuestion(isExpanded ? null : q.id)}>
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
+                            <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded">
+                              {renderHighlightedText(q.subject, searchQuery)}
+                            </span>
+                            <span className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded">
+                              {renderHighlightedText(q.topic, searchQuery)}
+                            </span>
+                            {q.exam && (
+                              <span className="bg-purple-50 text-purple-800 px-2 py-0.5 rounded">
+                                {renderHighlightedText(q.exam, searchQuery)} {q.year ? `(${q.year})` : ''}
+                              </span>
+                            )}
+                            <span className="text-gray-400 font-mono text-[10px]">
+                              #{qIndex + 1}
+                            </span>
+                          </div>
+                          <h4 className="text-xs sm:text-sm font-semibold text-gray-800 leading-relaxed mt-1 font-sans whitespace-pre-line">
+                            {renderHighlightedText(q.text_hi, searchQuery)}
+                          </h4>
                         </div>
-                        <h4 className="text-xs sm:text-sm font-semibold text-gray-800 leading-relaxed mt-1 font-sans whitespace-pre-line">
-                          {q.text_hi}
-                        </h4>
                       </div>
 
                       <button
@@ -6059,13 +6800,13 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {q.options_hi.map((opt, oIdx) => (
                             <div key={oIdx} className={`p-2 rounded-lg border text-xs whitespace-pre-line ${oIdx === q.correctAnswer ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-gray-200 text-gray-700'}`}>
-                              {String.fromCharCode(65 + oIdx)}. {opt} {oIdx === q.correctAnswer && '✓'}
+                              {String.fromCharCode(65 + oIdx)}. {renderHighlightedText(opt, searchQuery)} {oIdx === q.correctAnswer && '✓'}
                             </div>
                           ))}
                         </div>
                         {q.explanation_hi && (
                           <div className="text-xs text-gray-600 pt-1 whitespace-pre-line">
-                            <strong>व्याख्या:</strong> {q.explanation_hi}
+                            <strong>व्याख्या:</strong> {renderHighlightedText(q.explanation_hi, searchQuery)}
                           </div>
                         )}
                       </div>
@@ -6894,6 +7635,92 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                   </p>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BULK KEYWORD DELETE CONFIRMATION MODAL */}
+      {kwModalConfirm && kwModalConfirm.open && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl border-2 border-red-200">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 bg-red-100 text-red-700 rounded-2xl flex items-center justify-center">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900">
+                    बल्क डिलीट पुष्टि (Confirm Bulk Delete)
+                  </h3>
+                  <p className="text-[11px] text-red-600 font-bold">चेतावनी: यह क्रिया वापस नहीं ली जा सकती!</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setKwModalConfirm(null)}
+                className="text-gray-400 hover:text-gray-600 font-bold p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-gray-700 leading-relaxed">
+              <p className="font-semibold text-gray-800">
+                क्या आप वाकई निम्नलिखित प्रश्नों को डेटाबेस से <strong>हमेशा के लिए हटाना</strong> चाहते हैं?
+              </p>
+
+              <div className="bg-red-50 border border-red-200 p-3.5 rounded-2xl space-y-1.5 font-medium text-xs">
+                {kwModalConfirm.type === 'allKeyword' && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">सर्च कीवर्ड:</span>
+                      <span className="font-extrabold text-red-700 font-mono">"{kwModalConfirm.keyword}"</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">विषय दायरा:</span>
+                      <span className="font-bold text-gray-900">{kwSearchSubject === 'all' ? 'सभी विषय' : kwSearchSubject}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-between border-t border-red-100 pt-1.5 font-bold">
+                  <span className="text-gray-700">कुल डिलीट होने वाले प्रश्न:</span>
+                  <span className="text-red-700 font-black text-sm">{kwModalConfirm.count} प्रश्न</span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-gray-500 italic">
+                डिलीट करने के बाद इन प्रश्नों से संबंधित टेस्ट और दैनिक क्विज के संदर्भ भी सुरक्षित रूप से अपडेट हो जाएंगे।
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setKwModalConfirm(null)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 transition cursor-pointer"
+              >
+                रद्द करें (Cancel)
+              </button>
+
+              <button
+                type="button"
+                disabled={kwDeleting}
+                onClick={async () => {
+                  if (kwModalConfirm.type === 'allKeyword' && kwModalConfirm.keyword) {
+                    await handleDeleteByKeyword(
+                      kwModalConfirm.keyword,
+                      kwSearchSubject,
+                      activeSubTab === 'subjectWise'
+                    );
+                  } else if (kwModalConfirm.type === 'selected' && kwModalConfirm.ids) {
+                    await handleBulkDeleteSelectedIds(kwModalConfirm.ids);
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 transition cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                {kwDeleting ? "हटाया जा रहा है..." : "हाँ, हमेशा के लिए डिलीट करें"}
+              </button>
             </div>
           </div>
         </div>

@@ -592,6 +592,117 @@ app.delete('/api/questions/:id', (req, res) => {
   res.json({ message: "Question deleted successfully", id: qId });
 });
 
+// Bulk delete questions by IDs
+app.post('/api/questions/bulk-delete', (req, res) => {
+  const db = loadDatabase();
+  const { ids } = req.body;
+  
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "हटाने के लिए प्रश्नों की आईडी सूची (ids array) आवश्यक है।" });
+  }
+
+  const idSet = new Set(ids.map((id: any) => String(id).trim()));
+  const initialLength = (db.questions || []).length;
+  
+  db.questions = (db.questions || []).filter((q: any) => !idSet.has(String(q.id).trim()));
+  const deletedCount = initialLength - db.questions.length;
+  
+  // Clean up references in quizzes if any
+  if (Array.isArray(db.quizzes)) {
+    db.quizzes.forEach((quiz: any) => {
+      if (Array.isArray(quiz.questionIds)) {
+        quiz.questionIds = quiz.questionIds.filter((qid: string) => !idSet.has(String(qid).trim()));
+      }
+    });
+  }
+
+  saveDatabase(db);
+  res.json({ 
+    success: true, 
+    message: `${deletedCount} प्रश्न सफलतापूर्वक डिलीट कर दिए गए हैं।`, 
+    deletedCount, 
+    remainingCount: db.questions.length 
+  });
+});
+
+// Delete questions matching a specific keyword / term & optional subject/topic filter
+app.post('/api/questions/delete-by-keyword', (req, res) => {
+  const db = loadDatabase();
+  const { keyword, subject, topic, onlySubjectWise, matchField } = req.body;
+  
+  const term = (keyword || '').toString().trim().toLowerCase();
+  if (!term) {
+    return res.status(400).json({ error: "खोजने और डिलीट करने हेतु शब्द (keyword) दर्ज करना अनिवार्य है।" });
+  }
+
+  const initialLength = (db.questions || []).length;
+  const deletedIds: string[] = [];
+
+  db.questions = (db.questions || []).filter((q: any) => {
+    // Subject filter
+    if (subject && subject !== 'all' && q.subject !== subject) {
+      return true; // keep
+    }
+    
+    // Topic filter
+    if (topic && topic !== 'all' && topic.trim() && !String(q.topic || '').toLowerCase().includes(topic.trim().toLowerCase())) {
+      return true; // keep
+    }
+
+    // Only Subject-Wise filter (exclude PYQs)
+    if (onlySubjectWise && q.exam && String(q.exam).trim() !== '') {
+      return true; // keep
+    }
+
+    // Keyword matching based on matchField
+    let isMatched = false;
+    const textHi = (q.text_hi || '').toLowerCase();
+    const topicText = (q.topic || '').toLowerCase();
+    const subjectText = (q.subject || '').toLowerCase();
+    const explanationHi = (q.explanation_hi || '').toLowerCase();
+    const optionsText = Array.isArray(q.options_hi) ? q.options_hi.join(' ').toLowerCase() : '';
+
+    if (matchField === 'text') {
+      isMatched = textHi.includes(term);
+    } else if (matchField === 'topic') {
+      isMatched = topicText.includes(term);
+    } else if (matchField === 'explanation') {
+      isMatched = explanationHi.includes(term);
+    } else if (matchField === 'subject') {
+      isMatched = subjectText.includes(term);
+    } else {
+      // Default: 'all'
+      isMatched = textHi.includes(term) || topicText.includes(term) || subjectText.includes(term) || explanationHi.includes(term) || optionsText.includes(term);
+    }
+
+    if (isMatched) {
+      deletedIds.push(q.id);
+      return false; // delete this question
+    }
+    return true; // keep
+  });
+
+  const deletedCount = initialLength - db.questions.length;
+  
+  if (deletedCount > 0 && Array.isArray(db.quizzes)) {
+    const deletedSet = new Set(deletedIds);
+    db.quizzes.forEach((quiz: any) => {
+      if (Array.isArray(quiz.questionIds)) {
+        quiz.questionIds = quiz.questionIds.filter((qid: string) => !deletedSet.has(qid));
+      }
+    });
+  }
+
+  saveDatabase(db);
+  res.json({
+    success: true,
+    message: `कीवर्ड '${keyword}' से मेल खाने वाले कुल ${deletedCount} प्रश्न सफलतापूर्वक डिलीट कर दिए गए हैं।`,
+    deletedCount,
+    remainingCount: db.questions.length,
+    keyword
+  });
+});
+
 // Bulk append questions (Used by Subject-Wise HTML Parser, PYQ Importer & Daily Practice Sync)
 app.post('/api/questions/bulk', (req, res) => {
   try {
