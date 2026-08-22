@@ -23,6 +23,8 @@ import {
 
 interface EngagementStats {
   summary: {
+    realtimeActiveUsers?: number;
+    totalUniqueUsers?: number;
     totalPageViews: number;
     totalActiveSessions: number;
     totalTimeSpentSeconds: number;
@@ -49,6 +51,8 @@ interface EngagementStats {
     label: string;
     durationSeconds: number;
     device: string;
+    userName?: string;
+    isCurrentlyActive?: boolean;
     timestamp: string;
   }>;
   popularTests: Array<{
@@ -65,9 +69,10 @@ export default function AdminAnalyticsStats() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'today' | '7days' | 'all'>('all');
+  const [resetting, setResetting] = useState(false);
 
-  const fetchEngagementStats = async () => {
-    setLoading(true);
+  const fetchEngagementStats = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/admin/engagement-stats?range=${timeRange}`);
@@ -75,14 +80,37 @@ export default function AdminAnalyticsStats() {
       const data = await res.json();
       setStats(data);
     } catch (err: any) {
-      setError(err.message || "Failed to load statistics");
+      if (!isBackground) setError(err.message || "Failed to load statistics");
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
+    }
+  };
+
+  const handleResetAnalytics = async () => {
+    if (!window.confirm("क्या आप सचमुच सभी विज़िटर ट्रैकिंग और टाइम स्पेंड लॉग्स को 0 (Empty) पर रीसेट करना चाहते हैं? इससे सारा पुराना टेस्ट-ट्रैफिक डेटा खाली हो जाएगा।")) {
+      return;
+    }
+    setResetting(true);
+    try {
+      const res = await fetch('/api/admin/engagement-stats/reset', { method: 'POST' });
+      if (res.ok) {
+        await fetchEngagementStats();
+        alert("एनालिटिक्स डेटा सफलतापूर्वक 0 पर रीसेट कर दिया गया है!");
+      }
+    } catch (err: any) {
+      alert("रीसेट करने में त्रुटि: " + err.message);
+    } finally {
+      setResetting(false);
     }
   };
 
   useEffect(() => {
     fetchEngagementStats();
+    // Background polling every 15 seconds to stream live active user activities
+    const interval = setInterval(() => {
+      fetchEngagementStats(true);
+    }, 15000);
+    return () => clearInterval(interval);
   }, [timeRange]);
 
   const formatSecondsToReadable = (seconds: number) => {
@@ -159,6 +187,15 @@ export default function AdminAnalyticsStats() {
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>रिफ्रेश</span>
           </button>
+
+          <button
+            onClick={handleResetAnalytics}
+            disabled={resetting}
+            className="bg-rose-950 hover:bg-rose-900 active:scale-95 text-rose-300 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition border border-rose-800/80 cursor-pointer"
+            title="लॉग्स खाली करके 0 करें"
+          >
+            <span>🗑️ डेटा 0 करें</span>
+          </button>
         </div>
       </div>
 
@@ -178,77 +215,112 @@ export default function AdminAnalyticsStats() {
 
       {stats && (
         <>
-          {/* 4 KEY METRIC CARDS */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Metric 1: Avg Time per Session */}
-            <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white p-5 rounded-3xl shadow-sm space-y-2 relative overflow-hidden">
+          {/* 6 KEY METRIC CARDS (With Realtime Active & Total Users) */}
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3.5">
+            {/* Metric 1: Realtime Active Users */}
+            <div className="bg-gradient-to-br from-rose-600 via-rose-700 to-red-800 text-white p-4.5 rounded-3xl shadow-sm space-y-1.5 relative overflow-hidden border border-rose-500/30">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black uppercase tracking-wider text-amber-100">
+                <span className="text-[10px] font-black uppercase tracking-wider text-rose-200 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  लाइव एक्टिव (Active)
+                </span>
+                <Users className="h-4.5 w-4.5 text-rose-200" />
+              </div>
+              <div className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-baseline gap-1">
+                <span>{(stats.summary.realtimeActiveUsers || 0).toLocaleString()}</span>
+                <span className="text-xs font-bold text-rose-200">छात्र</span>
+              </div>
+              <p className="text-[10px] text-rose-100/90 font-medium">
+                अभी साइट पर सक्रिय
+              </p>
+            </div>
+
+            {/* Metric 2: Total Unique Users */}
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-4.5 rounded-3xl shadow-sm space-y-1.5 relative overflow-hidden border border-blue-500/30">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-100">
+                  {timeRange === 'today' ? 'आज के यूज़र्स (Today)' : timeRange === '7days' ? '7 दिन के यूज़र्स (7 Days)' : 'कुल यूज़र्स (Total Users)'}
+                </span>
+                <Globe className="h-4.5 w-4.5 text-blue-200" />
+              </div>
+              <div className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-baseline gap-1">
+                <span>{(stats.summary.totalUniqueUsers || 0).toLocaleString()}</span>
+                <span className="text-xs font-bold text-blue-200">विद्यार्थी</span>
+              </div>
+              <p className="text-[10px] text-blue-100/90 font-medium">
+                {timeRange === 'today' ? 'आज सक्रिय छात्र' : timeRange === '7days' ? 'पिछले 7 दिन में सक्रिय छात्र' : 'कुल पंजीकृत व सक्रिय छात्र'}
+              </p>
+            </div>
+
+            {/* Metric 3: Avg Time per Session */}
+            <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white p-4.5 rounded-3xl shadow-sm space-y-1.5 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-100">
                   औसत समय (Avg Time)
                 </span>
-                <Clock className="h-5 w-5 text-amber-200" />
+                <Clock className="h-4.5 w-4.5 text-amber-200" />
               </div>
-              <div className="text-2xl sm:text-3xl font-black tracking-tight">
-                {formatSecondsToReadable(stats.summary.avgTimePerSessionSeconds)}
+              <div className="text-xl sm:text-2xl font-black tracking-tight">
+                {formatSecondsToReadable(stats.summary.avgTimePerSessionSeconds || 0)}
               </div>
-              <p className="text-[11px] text-amber-100 font-medium">
-                प्रति छात्र वेबसाइट पर बिताया गया औसत समय
+              <p className="text-[10px] text-amber-100 font-medium">
+                प्रति सेशन औसत समय
               </p>
             </div>
 
-            {/* Metric 2: Total Page Views */}
-            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white p-5 rounded-3xl shadow-sm space-y-2 relative overflow-hidden">
+            {/* Metric 4: Total Page Views */}
+            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white p-4.5 rounded-3xl shadow-sm space-y-1.5 relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-100">
-                  कुल पेज व्यूज (Total Views)
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-100">
+                  पेज व्यूज (Views)
                 </span>
-                <Eye className="h-5 w-5 text-emerald-200" />
+                <Eye className="h-4.5 w-4.5 text-emerald-200" />
               </div>
               <div className="text-2xl sm:text-3xl font-black tracking-tight">
-                {stats.summary.totalPageViews.toLocaleString()}
+                {(stats.summary.totalPageViews || 0).toLocaleString()}
               </div>
-              <p className="text-[11px] text-emerald-100 font-medium">
-                कुल देखे गए पेजों की संख्या
+              <p className="text-[10px] text-emerald-100 font-medium">
+                कुल देखे गए पेज
               </p>
             </div>
 
-            {/* Metric 3: Total Tests Given */}
-            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 text-white p-5 rounded-3xl shadow-sm space-y-2 relative overflow-hidden">
+            {/* Metric 5: Total Tests Given */}
+            <div className="bg-gradient-to-br from-indigo-700 to-purple-800 text-white p-4.5 rounded-3xl shadow-sm space-y-1.5 relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black uppercase tracking-wider text-indigo-100">
-                  टेस्ट अटेम्प्ट्स (Quizzes)
+                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-100">
+                  क्विज़ (Quizzes)
                 </span>
-                <Award className="h-5 w-5 text-indigo-200" />
+                <Award className="h-4.5 w-4.5 text-indigo-200" />
               </div>
               <div className="text-2xl sm:text-3xl font-black tracking-tight">
-                {stats.summary.totalQuizzesAttempted.toLocaleString()}
+                {(stats.summary.totalQuizzesAttempted || 0).toLocaleString()}
               </div>
-              <p className="text-[11px] text-indigo-100 font-medium">
-                {stats.summary.totalQuestionsAnswered.toLocaleString()} कुल प्रश्न छात्रों ने हल किए
+              <p className="text-[10px] text-indigo-100 font-medium">
+                {(stats.summary.totalQuestionsAnswered || 0).toLocaleString()} प्रश्न हल किए
               </p>
             </div>
 
-            {/* Metric 4: Device Split */}
-            <div className="bg-gradient-to-br from-slate-800 to-slate-950 text-white p-5 rounded-3xl shadow-sm space-y-2 relative overflow-hidden">
+            {/* Metric 6: Device Split */}
+            <div className="bg-gradient-to-br from-slate-800 to-slate-950 text-white p-4.5 rounded-3xl shadow-sm space-y-1.5 relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black uppercase tracking-wider text-slate-300">
-                  उपकरण विभाजन (Devices)
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">
+                  उपकरण (Devices)
                 </span>
-                <Smartphone className="h-5 w-5 text-slate-300" />
+                <Smartphone className="h-4.5 w-4.5 text-slate-300" />
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl sm:text-3xl font-black text-amber-400">
-                  {stats.deviceBreakdown.mobile}%
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl sm:text-2xl font-black text-amber-400">
+                  {stats.deviceBreakdown?.mobile || 0}%
                 </span>
-                <span className="text-xs text-slate-300 font-bold">मोबाइल</span>
-                <span className="text-sm text-slate-400 font-normal">|</span>
-                <span className="text-lg font-extrabold text-slate-200">
-                  {stats.deviceBreakdown.desktop}%
+                <span className="text-[10px] text-slate-300 font-bold">Mob</span>
+                <span className="text-xs text-slate-400 font-normal">|</span>
+                <span className="text-base font-extrabold text-slate-200">
+                  {stats.deviceBreakdown?.desktop || 0}%
                 </span>
-                <span className="text-xs text-slate-400 font-bold">डेस्कटॉप</span>
+                <span className="text-[10px] text-slate-400 font-bold">Desk</span>
               </div>
-              <p className="text-[11px] text-slate-300 font-medium">
-                छात्र सबसे ज्यादा मोबाइल से अभ्यास कर रहे हैं
+              <p className="text-[10px] text-slate-300 font-medium">
+                उपकरण विभाजन
               </p>
             </div>
           </div>
@@ -314,7 +386,7 @@ export default function AdminAnalyticsStats() {
                               className={`h-full rounded-full ${
                                 idx === 0 ? 'bg-amber-500' : idx === 1 ? 'bg-emerald-600' : 'bg-indigo-500'
                               }`}
-                              style={{ width: `${Math.max(5, page.sharePercent)}%` }}
+                              style={{ width: `${page.sharePercent > 0 ? Math.max(5, page.sharePercent) : 0}%` }}
                             ></div>
                           </div>
                           <span className="text-[11px] font-extrabold text-gray-700 w-9 text-right">
@@ -371,32 +443,47 @@ export default function AdminAnalyticsStats() {
               </div>
             </div>
 
-            {/* Recent Live Activity Stream */}
+            {/* Active User Activity Stream (सक्रिय यूजर गतिविधि) */}
             <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-emerald-600" />
-                  हालिया गतिविधि स्ट्रीम (Recent User Actions)
+                  <Activity className="h-4 w-4 text-emerald-600 animate-pulse" />
+                  सक्रिय यूज़र गतिविधि (Active User Activity)
                 </h3>
-                <span className="text-[11px] text-emerald-700 font-black bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                  Realtime
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  <span className="text-[11px] text-emerald-700 font-black bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    {stats.summary.realtimeActiveUsers} लाइव सक्रिय
+                  </span>
+                </div>
               </div>
 
               <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                 {stats.recentActivity.length === 0 ? (
                   <div className="text-center py-8 text-xs text-gray-400 font-medium">
-                    कोई हालिया गतिविधि नहीं। छात्र जैसे ही वेबसाइट पर आएंगे, उनका लाइव टाइम यहाँ दिखेगा।
+                    कोई सक्रिय यूज़र गतिविधि नहीं। छात्र जैसे ही वेबसाइट पर अभ्यास करेंगे, उनका लाइव विवरण यहाँ दिखेगा।
                   </div>
                 ) : (
                   stats.recentActivity.map((act, i) => (
-                    <div key={i} className="p-3 rounded-2xl bg-gray-50/80 border border-gray-100 flex items-center justify-between gap-3 text-xs">
+                    <div key={i} className="p-3 rounded-2xl bg-gray-50/80 border border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/30 transition flex items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-ping"></div>
+                        <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${act.isCurrentlyActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></div>
                         <div>
-                          <span className="font-extrabold text-gray-900 block leading-tight">{act.label}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-extrabold text-gray-900 leading-tight">
+                              {act.userName ? `👤 ${act.userName}` : 'विद्यार्थी (Aspirant)'}
+                            </span>
+                            {act.isCurrentlyActive && (
+                              <span className="text-[9px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-full">
+                                LIVE
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-600 font-semibold mt-0.5">
+                            {act.label}
+                          </p>
                           <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1.5 mt-0.5">
-                            <span>{act.device === 'mobile' ? '📱 Mobile' : '💻 Desktop'}</span> • <span>{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>{act.device === 'mobile' ? '📱 Mobile' : '💻 Desktop'}</span> • <span>{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
                           </span>
                         </div>
                       </div>

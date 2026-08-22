@@ -38,7 +38,7 @@ export default function AboutUs() {
             Dedicated Platform for CGPSC & Chhattisgarh State Competitive Exams
           </h1>
           <p className="text-sm md:text-base text-teal-100 leading-relaxed max-w-xl">
-            Our prep portal is committed to providing outstanding mock materials, verified answer explanations, and dynamic study trackers to every serious candidate aiming to crack state competitive exams.
+            Our prep website is committed to providing outstanding mock materials, verified answer explanations, and dynamic study trackers to every serious candidate aiming to crack state competitive exams.
           </p>
         </div>
       </div>

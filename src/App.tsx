@@ -205,6 +205,15 @@ export default function App() {
     // Exclude admin panel visits from end-user traffic stats
     if (activeTab === 'admin') return;
 
+    let clientId = localStorage.getItem('cg_client_id');
+    if (!clientId) {
+      clientId = 'cli_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('cg_client_id', clientId);
+    }
+
+    const userName = localStorage.getItem('cg_student_name') || '';
+    const userMobile = localStorage.getItem('cg_student_mobile') || '';
+
     let startTime = Date.now();
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     const deviceType = isMobile ? 'mobile' : 'desktop';
@@ -220,6 +229,9 @@ export default function App() {
           path: `/?tab=${activeTab}`,
           durationSeconds,
           device: deviceType,
+          clientId,
+          userName: userName || undefined,
+          userMobile: userMobile || undefined,
           referrer: document.referrer || '',
           timestamp: new Date().toISOString()
         });
@@ -300,7 +312,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-emerald-50/40 flex flex-col items-center justify-center font-sans">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-        <p className="mt-4 text-emerald-800 font-semibold text-sm">Loading TestArena Portal... Please wait</p>
+        <p className="mt-4 text-emerald-800 font-semibold text-sm">Loading TestArena Website... Please wait</p>
       </div>
     );
   }
@@ -459,7 +471,7 @@ export default function App() {
                 }}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs cursor-pointer"
               >
-                <Share2 className="h-4 w-4" /> पोर्टल मित्रों के साथ शेयर करें (Share Portal)
+                <Share2 className="h-4 w-4" /> वेबसाइट मित्रों के साथ शेयर करें (Share Website)
               </button>
             </div>
 

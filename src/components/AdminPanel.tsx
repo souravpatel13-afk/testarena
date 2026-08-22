@@ -153,7 +153,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [subSubject, setSubSubject] = useState('छत्तीसगढ़ सामान्य ज्ञान');
   const [subCustomSubject, setSubCustomSubject] = useState('');
   const [subTopic, setSubTopic] = useState('सामान्य परिचय एवं इतिहास');
-  const [subInputMode, setSubInputMode] = useState<'bulkHtml' | 'manual'>('bulkHtml');
+  const [subInputMode, setSubInputMode] = useState<'bulkHtml' | 'manual' | 'importDp'>('bulkHtml');
   const [subBulkHtmlText, setSubBulkHtmlText] = useState<string>('');
   const [subParsedQuestions, setSubParsedQuestions] = useState<Question[]>([]);
   const [subSuccessMsg, setSubSuccessMsg] = useState<string | null>(null);
@@ -165,6 +165,8 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [subSingleOptionsHi, setSubSingleOptionsHi] = useState<string[]>(['', '', '', '']);
   const [subSingleCorrectAnswer, setSubSingleCorrectAnswer] = useState<number>(0);
   const [subSingleExplanationHi, setSubSingleExplanationHi] = useState('');
+  const [subDpImportSetId, setSubDpImportSetId] = useState<string>('');
+  const [subDpImportLoading, setSubDpImportLoading] = useState<boolean>(false);
 
   // PYQ HTML Bulk & Manual Question States
   const [pyqExam, setPyqExam] = useState('CGPSC Prelims');
@@ -263,6 +265,18 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
   const [dpErrorMsg, setDpErrorMsg] = useState<string | null>(null);
   const [dpSaving, setDpSaving] = useState(false);
   const [dpPreviewQuestionIndex, setDpPreviewQuestionIndex] = useState<number | null>(null);
+
+  // Daily Practice to Subject-Wise Sync States
+  const [dpAlsoAddToSubjectWise, setDpAlsoAddToSubjectWise] = useState<boolean>(true);
+  const [dpSyncSubject, setDpSyncSubject] = useState<string>('छत्तीसगढ़ सामान्य ज्ञान');
+  const [dpCustomSyncSubject, setDpCustomSyncSubject] = useState<string>('');
+  const [dpSyncTopic, setDpSyncTopic] = useState<string>('');
+  const [dpBatchSyncing, setDpBatchSyncing] = useState<boolean>(false);
+  const [dpSyncModalSet, setDpSyncModalSet] = useState<DailyPracticeSet | null>(null);
+  const [dpSyncModalSubject, setDpSyncModalSubject] = useState<string>('छत्तीसगढ़ सामान्य ज्ञान');
+  const [dpSyncModalCustomSubject, setDpSyncModalCustomSubject] = useState<string>('');
+  const [dpSyncModalTopic, setDpSyncModalTopic] = useState<string>('');
+  const [dpSyncModalSaving, setDpSyncModalSaving] = useState<boolean>(false);
 
   // Daily Practice Categories States & Handlers
   const [dpCategories, setDpCategories] = useState<DailyPracticeCategory[]>([]);
@@ -515,7 +529,33 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
       });
 
       if (res.ok) {
-        setDpSuccessMsg("डेली प्रैक्टिस सेट सफलतापूर्वक सहेजा एवं वेबसाइट पर लाइव कर दिया गया है!");
+        const savedData = await res.json().catch(() => ({}));
+        let syncNotice = "";
+
+        // Automatically sync to Subject-Wise Question Bank if checked
+        if (dpAlsoAddToSubjectWise && dpQuestions.length > 0) {
+          const finalSub = (dpSyncSubject === '__custom__' ? dpCustomSyncSubject.trim() : dpSyncSubject.trim()) || dpSubject || 'छत्तीसगढ़ सामान्य ज्ञान';
+          const finalTop = dpSyncTopic.trim() || dpTitle.trim() || 'डेली प्रैक्टिस क्विज';
+          try {
+            const syncRes = await fetch('/api/daily-practice/sync-to-subjectwise', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                setId: dpEditingId || savedData.id || payload.id,
+                targetSubject: finalSub,
+                targetTopic: finalTop,
+                questions: dpQuestions
+              })
+            });
+            if (syncRes.ok) {
+              syncNotice = ` ➔ साथ ही इसके ${dpQuestions.length} प्रश्न विषय-वार बैंक (${finalSub} > ${finalTop}) में भी तुरंत सुरक्षित कर दिए गए हैं!`;
+            }
+          } catch (syncErr) {
+            console.error("Auto sync to subjectwise error:", syncErr);
+          }
+        }
+
+        setDpSuccessMsg(`डेली प्रैक्टिस सेट सफलतापूर्वक सहेजा एवं लाइव कर दिया गया है!${syncNotice}`);
         fetchDailyPractice();
         if (onRefreshQuestions) onRefreshQuestions();
       } else {
@@ -527,6 +567,110 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
     } finally {
       setDpSaving(false);
     }
+  };
+
+  const handleSyncSetToSubjectWise = async (set: DailyPracticeSet, targetSubject?: string, targetTopic?: string) => {
+    const finalSub = (targetSubject === '__custom__' ? dpSyncModalCustomSubject.trim() : (targetSubject || set.subject || 'छत्तीसगढ़ सामान्य ज्ञान')).trim();
+    const finalTop = (targetTopic || set.title || 'डेली प्रैक्टिस क्विज').trim();
+    
+    setDpSyncModalSaving(true);
+    try {
+      const res = await fetch('/api/daily-practice/sync-to-subjectwise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          setId: set.id,
+          targetSubject: finalSub,
+          targetTopic: finalTop,
+          questions: set.questions
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setDpSuccessMsg(`सफलतापूर्वक '${set.title}' के ${data.count || set.questions?.length || 0} प्रश्न विषय-वार बैंक (${finalSub} ➔ ${finalTop}) में जोड़ दिए गए हैं!`);
+        setDpSyncModalSet(null);
+        if (onRefreshQuestions) onRefreshQuestions();
+        return true;
+      } else {
+        const errJson = await res.json();
+        setDpErrorMsg(errJson.error || "विषय-वार में जोड़ने में विफल।");
+        return false;
+      }
+    } catch (err: any) {
+      setDpErrorMsg("सर्वर त्रुटि: " + err.message);
+      return false;
+    } finally {
+      setDpSyncModalSaving(false);
+    }
+  };
+
+  const handleSyncAllDailyPracticeToSubjectWise = async () => {
+    if (dpList.length === 0) {
+      alert("कोई डेली प्रैक्टिस सेट उपलब्ध नहीं है।");
+      return;
+    }
+    if (!confirm(`क्या आप सभी ${dpList.length} डेली प्रैक्टिस सेट्स के प्रश्नों को विषय-वार प्रश्न बैंक में सिंक करना चाहते हैं?`)) {
+      return;
+    }
+    setDpBatchSyncing(true);
+    let totalSynced = 0;
+    try {
+      for (const item of dpList) {
+        if (item.questions && item.questions.length > 0) {
+          const res = await fetch('/api/daily-practice/sync-to-subjectwise', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              setId: item.id,
+              targetSubject: item.subject || 'छत्तीसगढ़ सामान्य ज्ञान',
+              targetTopic: item.title || 'डेली प्रैक्टिस क्विज',
+              questions: item.questions
+            })
+          });
+          if (res.ok) {
+            const d = await res.json();
+            totalSynced += d.count || item.questions.length;
+          }
+        }
+      }
+      setDpSuccessMsg(`सफलतापूर्वक कुल ${totalSynced} डेली क्विज प्रश्न विषय-वार प्रश्न बैंक में सिंक कर दिए गए हैं!`);
+      if (onRefreshQuestions) onRefreshQuestions();
+    } catch (err: any) {
+      setDpErrorMsg("सिंक त्रुटि: " + err.message);
+    } finally {
+      setDpBatchSyncing(false);
+    }
+  };
+
+  const handleLoadDpSetIntoSubjectWise = (setId: string) => {
+    const set = dpList.find(s => s.id === setId);
+    if (!set || !set.questions || set.questions.length === 0) {
+      setSubErrorMsg("चयनित डेली प्रैक्टिस सेट में कोई प्रश्न नहीं मिले।");
+      return;
+    }
+
+    const targetSub = subSubject === '__custom__' ? (subCustomSubject.trim() || 'छत्तीसगढ़ सामान्य ज्ञान') : subSubject;
+    const targetTop = subTopic.trim() || set.title || 'डेली प्रैक्टिस क्विज';
+
+    const converted: Question[] = set.questions.map((q, idx) => {
+      let opts = q.optionsHtml || ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"];
+      return {
+        id: `q-sub-dp-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        text_hi: q.questionHtml || `प्रश्न ${idx + 1}`,
+        options_hi: opts,
+        correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
+        subject: targetSub,
+        topic: targetTop,
+        exam: undefined,
+        year: undefined,
+        explanation_hi: q.explanationHtml || ''
+      };
+    });
+
+    setSubParsedQuestions(converted);
+    setSubSuccessMsg(`सफलतापूर्वक '${set.title}' से ${converted.length} प्रश्न लोड कर लिए गए हैं! आप नीचे समीक्षा/संपादन करके 'डेटाबेस में सहेजें' पर क्लिक करें।`);
+    setSubErrorMsg(null);
   };
 
   const handleLoadSampleHtml = () => {
@@ -3148,6 +3292,78 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                 )}
               </div>
 
+              {/* Auto Sync to Subject-Wise Box */}
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-300/80 rounded-2xl p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={dpAlsoAddToSubjectWise}
+                      onChange={(e) => setDpAlsoAddToSubjectWise(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 rounded border-emerald-300 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-extrabold text-emerald-950 flex items-center gap-1.5">
+                      <BookOpen className="h-4 w-4 text-emerald-700" />
+                      इन सभी प्रश्नों को 'विषय-वार प्रश्न बैंक' (Subject-Wise Bank) में भी स्वतः जोड़ें
+                    </span>
+                  </label>
+                  <span className="text-[11px] font-extrabold px-2.5 py-1 bg-emerald-200/80 text-emerald-900 rounded-lg w-fit">
+                    {dpQuestions.length} प्रश्न विषय-वार में जाएंगे
+                  </span>
+                </div>
+
+                {dpAlsoAddToSubjectWise && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-emerald-200/60">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-gray-700 block">
+                        लक्षित विषय (Target Subject):*
+                      </label>
+                      <select
+                        value={dpSyncSubject}
+                        onChange={(e) => setDpSyncSubject(e.target.value)}
+                        className="w-full p-2 text-xs font-bold bg-white border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="छत्तीसगढ़ सामान्य ज्ञान">छत्तीसगढ़ सामान्य ज्ञान (CG GK)</option>
+                        <option value="भारतीय इतिहास एवं स्वतंत्रता आंदोलन">भारतीय इतिहास (Indian History)</option>
+                        <option value="भारतीय संविधान एवं राजव्यवस्था">भारतीय संविधान एवं राजव्यवस्था (Polity)</option>
+                        <option value="भूगोल (भारत एवं छत्तीसगढ़)">भूगोल - भारत एवं छत्तीसगढ़ (Geography)</option>
+                        <option value="भारतीय अर्थव्यवस्था">भारतीय अर्थव्यवस्था (Indian Economy)</option>
+                        <option value="सामान्य विज्ञान एवं प्रौद्योगिकी">सामान्य विज्ञान एवं प्रौद्योगिकी (General Science)</option>
+                        <option value="भाषा - हिन्दी व छत्तीसगढ़ी">भाषा - हिन्दी व छत्तीसगढ़ी (Language Hindi/CG)</option>
+                        <option value="गणित एवं मानसिक योग्यता">गणित एवं मानसिक योग्यता (Maths & CSAT)</option>
+                        <option value="कंप्यूटर सामान्य ज्ञान">कंप्यूटर सामान्य ज्ञान (Computer GK)</option>
+                        <option value="पर्यावरण एवं पारिस्थितिकी">पर्यावरण एवं पारिस्थितिकी (Environment)</option>
+                        <option value="बाल विकास एवं शिक्षाशास्त्र">बाल विकास एवं शिक्षाशास्त्र (CDP / Pedagogy)</option>
+                        <option value="__custom__">➕ अन्य नया विषय (Custom Subject)...</option>
+                      </select>
+                      {dpSyncSubject === '__custom__' && (
+                        <input
+                          type="text"
+                          placeholder="नया विषय का नाम लिखें..."
+                          value={dpCustomSyncSubject}
+                          onChange={(e) => setDpCustomSyncSubject(e.target.value)}
+                          className="w-full mt-1.5 p-2 text-xs font-bold bg-white border border-emerald-400 rounded-xl"
+                        />
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-gray-700 block">
+                        लक्षित टॉपिक / अध्याय (Target Topic):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={dpTitle || "उदा. पर्यावरण एवं बाल विकास"}
+                        value={dpSyncTopic}
+                        onChange={(e) => setDpSyncTopic(e.target.value)}
+                        className="w-full p-2 text-xs font-bold bg-white border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <p className="text-[10px] text-emerald-800 font-medium">खाली छोड़ने पर सेट का शीर्षक ("{dpTitle || 'डेली प्रैक्टिस क्विज'}") उपयोग होगा।</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Save Button */}
               <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
                 <button
@@ -3172,17 +3388,29 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
 
             {/* List of Existing Saved Sets */}
             <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
                 <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
                   <BookOpen className="h-4 w-4 text-emerald-600" />
                   सहेजे गए डेली प्रैक्टिस सेट ({dpList.length})
                 </h3>
-                <button
-                  onClick={fetchDailyPractice}
-                  className="text-xs font-bold text-emerald-700 hover:bg-emerald-50 px-2.5 py-1 rounded-lg transition border border-emerald-200 cursor-pointer flex items-center gap-1"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" /> रिफ्रेश करें
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={dpBatchSyncing || dpList.length === 0}
+                    onClick={handleSyncAllDailyPracticeToSubjectWise}
+                    className="text-xs font-extrabold text-teal-900 bg-teal-100 hover:bg-teal-200 px-3 py-1.5 rounded-lg transition border border-teal-300 cursor-pointer flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
+                    title="सभी डेली प्रैक्टिस सेट्स के प्रश्नों को विषय-वार बैंक में सिंक करें"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${dpBatchSyncing ? 'animate-spin' : ''}`} />
+                    {dpBatchSyncing ? "सिंक हो रहा है..." : "⚡ सभी सेट्स विषय-वार में सिंक करें"}
+                  </button>
+                  <button
+                    onClick={fetchDailyPractice}
+                    className="text-xs font-bold text-emerald-700 hover:bg-emerald-50 px-2.5 py-1.5 rounded-lg transition border border-emerald-200 cursor-pointer flex items-center gap-1"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> रिफ्रेश
+                  </button>
+                </div>
               </div>
 
               {dpList.length === 0 ? (
@@ -3220,14 +3448,28 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                           <td className="p-3 font-bold text-emerald-700">
                             {item.questions?.length || 0} प्रश्न
                           </td>
-                          <td className="p-3 text-right whitespace-nowrap space-x-2">
+                          <td className="p-3 text-right whitespace-nowrap space-x-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDpSyncModalSet(item);
+                                setDpSyncModalSubject(item.subject || 'छत्तीसगढ़ सामान्य ज्ञान');
+                                setDpSyncModalTopic(item.title);
+                              }}
+                              className="bg-teal-50 text-teal-800 hover:bg-teal-100 px-2.5 py-1.5 rounded-lg font-extrabold border border-teal-300 transition cursor-pointer inline-flex items-center gap-1 text-[11px]"
+                              title="इस सेट के सभी प्रश्न विषय-वार बैंक में जोड़ें"
+                            >
+                              <BookOpen className="h-3 w-3 text-teal-600" />
+                              विषय-वार में जोड़ें
+                            </button>
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleEditDpSet(item);
                               }}
-                              className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-3 py-1.5 rounded-lg font-bold border border-emerald-200 transition cursor-pointer"
+                              className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg font-bold border border-emerald-200 transition cursor-pointer text-[11px]"
                             >
                               संपादित करें
                             </button>
@@ -3237,7 +3479,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                                 e.stopPropagation();
                                 setDeleteConfirm({ type: 'dpSet', id: item.id, name: item.title });
                               }}
-                              className="bg-red-50 text-red-700 hover:bg-red-100 px-3 py-1.5 rounded-lg font-bold border border-red-200 transition cursor-pointer"
+                              className="bg-red-50 text-red-700 hover:bg-red-100 px-2.5 py-1.5 rounded-lg font-bold border border-red-200 transition cursor-pointer text-[11px]"
                             >
                               हटाएं
                             </button>
@@ -3249,6 +3491,105 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                 </div>
               )}
             </div>
+
+            {/* Quick Subject-Wise Sync Modal */}
+            {dpSyncModalSet && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+                <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-teal-100 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center gap-3 text-teal-700 border-b border-gray-100 pb-3">
+                    <div className="p-2.5 bg-teal-50 rounded-2xl border border-teal-200">
+                      <BookOpen className="h-6 w-6 text-teal-700" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-gray-900">विषय-वार प्रश्न बैंक में जोड़ें</h3>
+                      <p className="text-[11px] text-teal-700 font-bold">Daily Quiz Questions to Subject-Wise Sync</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-teal-50/70 p-3.5 rounded-2xl border border-teal-100 space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500 font-bold">क्विज शीर्षक:</span>
+                      <span className="font-extrabold text-gray-900">{dpSyncModalSet.title}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500 font-bold">दिनांक व श्रेणी:</span>
+                      <span className="font-bold text-gray-700">{dpSyncModalSet.date} | {dpSyncModalSet.category || 'सहायक शिक्षक'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500 font-bold">कुल प्रश्न संख्या:</span>
+                      <span className="font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">{dpSyncModalSet.questions?.length || 0} प्रश्न</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-1">
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 block mb-1">
+                        लक्षित विषय (Target Subject):*
+                      </label>
+                      <select
+                        value={dpSyncModalSubject}
+                        onChange={(e) => setDpSyncModalSubject(e.target.value)}
+                        className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                      >
+                        <option value="छत्तीसगढ़ सामान्य ज्ञान">छत्तीसगढ़ सामान्य ज्ञान (CG GK)</option>
+                        <option value="भारतीय इतिहास एवं स्वतंत्रता आंदोलन">भारतीय इतिहास (Indian History)</option>
+                        <option value="भारतीय संविधान एवं राजव्यवस्था">भारतीय संविधान एवं राजव्यवस्था (Polity)</option>
+                        <option value="भूगोल (भारत एवं छत्तीसगढ़)">भूगोल - भारत एवं छत्तीसगढ़ (Geography)</option>
+                        <option value="भारतीय अर्थव्यवस्था">भारतीय अर्थव्यवस्था (Indian Economy)</option>
+                        <option value="सामान्य विज्ञान एवं प्रौद्योगिकी">सामान्य विज्ञान एवं प्रौद्योगिकी (General Science)</option>
+                        <option value="भाषा - हिन्दी व छत्तीसगढ़ी">भाषा - हिन्दी व छत्तीसगढ़ी (Language Hindi/CG)</option>
+                        <option value="गणित एवं मानसिक योग्यता">गणित एवं मानसिक योग्यता (Maths & CSAT)</option>
+                        <option value="कंप्यूटर सामान्य ज्ञान">कंप्यूटर सामान्य ज्ञान (Computer GK)</option>
+                        <option value="पर्यावरण एवं पारिस्थितिकी">पर्यावरण एवं पारिस्थितिकी (Environment)</option>
+                        <option value="बाल विकास एवं शिक्षाशास्त्र">बाल विकास एवं शिक्षाशास्त्र (CDP / Pedagogy)</option>
+                        <option value="__custom__">➕ अन्य नया विषय (Custom Subject)...</option>
+                      </select>
+                      {dpSyncModalSubject === '__custom__' && (
+                        <input
+                          type="text"
+                          placeholder="नया विषय का नाम दर्ज करें..."
+                          value={dpSyncModalCustomSubject}
+                          onChange={(e) => setDpSyncModalCustomSubject(e.target.value)}
+                          className="w-full mt-2 p-2 text-xs font-bold bg-white border border-teal-400 rounded-xl"
+                        />
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 block mb-1">
+                        लक्षित अध्याय / टॉपिक (Target Topic):*
+                      </label>
+                      <input
+                        type="text"
+                        value={dpSyncModalTopic}
+                        onChange={(e) => setDpSyncModalTopic(e.target.value)}
+                        placeholder="उदा. पर्यावरण अध्ययन या क्विज का नाम"
+                        className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setDpSyncModalSet(null)}
+                      className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition cursor-pointer"
+                    >
+                      रद्द करें
+                    </button>
+                    <button
+                      type="button"
+                      disabled={dpSyncModalSaving}
+                      onClick={() => handleSyncSetToSubjectWise(dpSyncModalSet, dpSyncModalSubject, dpSyncModalTopic)}
+                      className="px-6 py-2.5 text-xs font-extrabold text-white bg-teal-700 hover:bg-teal-800 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-50"
+                    >
+                      <Save className="h-4 w-4 text-amber-300" />
+                      {dpSyncModalSaving ? "सिंक किया जा रहा है..." : `हाँ, ${dpSyncModalSet.questions?.length || 0} प्रश्न विषय-वार में जोड़ें`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Custom Confirmation Modal for Deletions */}
             {deleteConfirm && (
@@ -3419,7 +3760,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
 
               {/* Mode Toggle Buttons */}
               <div className="flex items-center justify-between border-t border-gray-100 pt-3 flex-wrap gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-gray-600">प्रश्न इनपुट मोड:</span>
                   <button
                     type="button"
@@ -3432,6 +3773,18 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                   >
                     <Code2 className="h-4 w-4" />
                     ⚡ बल्क HTML कोड पार्सर (HTML Parser)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSubInputMode('importDp')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                      subInputMode === 'importDp'
+                        ? 'bg-teal-700 text-white shadow-xs'
+                        : 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                    }`}
+                  >
+                    <BookOpen className="h-4 w-4 text-emerald-600" />
+                    📥 डेली क्विज से आयात करें (Import from Daily Quiz)
                   </button>
                   <button
                     type="button"
@@ -3448,6 +3801,122 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                 </div>
               </div>
             </div>
+
+            {/* IMPORT FROM DAILY PRACTICE SECTION */}
+            {subInputMode === 'importDp' && (
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-gray-100">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                      <BookOpen className="h-4 w-4 text-teal-600" />
+                      डेली क्विज सेट से प्रश्न आयात करें (Import from Daily Quiz Set)
+                    </h3>
+                    <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                      डेली प्रैक्टिस में बनाए गए किसी भी क्विज सेट के प्रश्नों को सीधे विषय-वार बैंक में जोड़ें या लोड करके एडिट करें।
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={fetchDailyPractice}
+                    className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> सेट्स रिफ्रेश करें
+                  </button>
+                </div>
+
+                {dpList.length === 0 ? (
+                  <div className="p-8 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-300 space-y-2">
+                    <BookOpen className="h-8 w-8 text-gray-400 mx-auto" />
+                    <p className="text-xs font-bold text-gray-600">कोई डेली प्रैक्टिस सेट उपलब्ध नहीं है।</p>
+                    <p className="text-[11px] text-gray-400 font-medium">कृपया पहले 'डेली प्रैक्टिस क्विज' टैब में जाकर क्विज सेट बनाएं।</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-extrabold text-gray-800 block">
+                        डेली प्रैक्टिस सेट चुनें (Select Daily Practice Set)*
+                      </label>
+                      <select
+                        value={subDpImportSetId}
+                        onChange={(e) => {
+                          const selectedId = e.target.value;
+                          setSubDpImportSetId(selectedId);
+                          const found = dpList.find(s => s.id === selectedId);
+                          if (found) {
+                            if (found.subject && subSubject === 'छत्तीसगढ़ सामान्य ज्ञान') setSubSubject(found.subject);
+                            if (found.title) setSubTopic(found.title);
+                          }
+                        }}
+                        className="w-full p-2.5 text-xs font-bold bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                      >
+                        <option value="">-- डेली प्रैक्टिस सेट चुनें --</option>
+                        {dpList.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.date} | {s.category || 'सहायक शिक्षक'} | {s.title} ({s.questions?.length || 0} प्रश्न)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Selected Set Details & Action Buttons */}
+                    {subDpImportSetId && (() => {
+                      const selectedSet = dpList.find(s => s.id === subDpImportSetId);
+                      if (!selectedSet) return null;
+                      const qCount = selectedSet.questions?.length || 0;
+
+                      return (
+                        <div className="p-4 bg-teal-50/70 border border-teal-200 rounded-2xl space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-200/60 pb-2.5">
+                            <div>
+                              <h4 className="text-xs font-extrabold text-teal-950">{selectedSet.title}</h4>
+                              <p className="text-[11px] text-teal-800 font-medium">
+                                दिनांक: {selectedSet.date} • श्रेणी: {selectedSet.category || 'सहायक शिक्षक'} • लक्ष्य: {selectedSet.targetExam || 'CGPSC/व्यापमं'}
+                              </p>
+                            </div>
+                            <span className="text-xs font-black text-teal-900 bg-teal-200/80 px-3 py-1 rounded-xl">
+                              {qCount} प्रश्न
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] text-teal-900 font-medium">
+                            👉 ये {qCount} प्रश्न <strong>'{subSubject === '__custom__' ? subCustomSubject : subSubject}'</strong> विषय के <strong>'{subTopic || selectedSet.title}'</strong> टॉपिक में जोड़े जाएंगे।
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3 pt-1">
+                            <button
+                              type="button"
+                              disabled={subDpImportLoading || qCount === 0}
+                              onClick={async () => {
+                                const finalSub = (subSubject === '__custom__' ? subCustomSubject.trim() : subSubject.trim()) || selectedSet.subject || 'छत्तीसगढ़ सामान्य ज्ञान';
+                                const finalTop = subTopic.trim() || selectedSet.title;
+                                setSubDpImportLoading(true);
+                                await handleSyncSetToSubjectWise(selectedSet, finalSub, finalTop);
+                                setSubDpImportLoading(false);
+                                setSubSuccessMsg(`सफलतापूर्वक '${selectedSet.title}' के ${qCount} प्रश्न विषय-वार बैंक (${finalSub} > ${finalTop}) में सुरक्षित कर दिए गए हैं!`);
+                              }}
+                              className="px-5 py-2.5 rounded-xl text-xs font-extrabold text-white bg-teal-700 hover:bg-teal-800 transition flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                            >
+                              <Save className="h-4 w-4 text-amber-300" />
+                              {subDpImportLoading ? "जोड़ा जा रहा है..." : `⚡ सीधे विषय-वार बैंक में सहेजें (${qCount} प्रश्न)`}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleLoadDpSetIntoSubjectWise(selectedSet.id)}
+                              className="px-5 py-2.5 rounded-xl text-xs font-extrabold text-teal-900 bg-white border border-teal-300 hover:bg-teal-100 transition flex items-center gap-2 cursor-pointer shadow-xs"
+                            >
+                              <Eye className="h-4 w-4 text-teal-700" />
+                              📋 नीचे लोड करें एवं रिव्यू करें (Load to Parser)
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* BULK HTML PARSER SECTION */}
             {subInputMode === 'bulkHtml' && (
@@ -6127,7 +6596,7 @@ export default function AdminPanel({ questions, onRefreshQuestions, exams, onRef
                           </div>
                           <div className="flex items-center gap-2 text-xs flex-wrap">
                             <a
-                              href={`https://wa.me/91${sub.mobile.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`नमस्ते ${sub.name}, CG Exam Portal पर आपका स्वागत है!`)}`}
+                              href={`https://wa.me/91${sub.mobile.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`नमस्ते ${sub.name}, TestArena Website पर आपका स्वागत है!`)}`}
                               target="_blank"
                               rel="noreferrer"
                               className="font-black text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1 transition"

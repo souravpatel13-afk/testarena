@@ -8,8 +8,8 @@ interface SEOHeadProps {
 
 const tabMetadata: Record<string, { title: string; description: string; keywords: string; canonical: string }> = {
   home: {
-    title: 'Test Arena | CGPSC, CG Vyapam & State PSC Mock Test & PYQ Portal in Hindi',
-    description: 'Test Arena (testarena.co.in) - भारत एवं छत्तीसगढ़ राज्य की प्रतियोगी परीक्षाओं (CGPSC Prelims, CG Vyapam, UPSC, SSC, Railway) हेतु सर्वश्रेष्ठ निःशुल्क ऑनलाइन मॉक टेस्ट, पिछले वर्षों के प्रश्न पत्र (PYQ) तथा विषय-वार प्रैक्टिस पोर्टल।',
+    title: 'Test Arena | CGPSC, CG Vyapam & State PSC Mock Test & PYQ Website in Hindi',
+    description: 'Test Arena (testarena.co.in) - भारत एवं छत्तीसगढ़ राज्य की प्रतियोगी परीक्षाओं (CGPSC Prelims, CG Vyapam, UPSC, SSC, Railway) हेतु सर्वश्रेष्ठ निःशुल्क ऑनलाइन मॉक टेस्ट, पिछले वर्षों के प्रश्न पत्र (PYQ) तथा विषय-वार प्रैक्टिस वेबसाइट।',
     keywords: 'CGPSC Mock Test, CG Vyapam Previous Year Questions, Chhattisgarh GK Quiz, CGPSC Online Test Series in Hindi, Test Arena, CGPSC Prelims Practice, Chhattisgarh Current Affairs',
     canonical: 'https://testarena.co.in/'
   },
@@ -38,9 +38,9 @@ const tabMetadata: Record<string, { title: string; description: string; keywords
     canonical: 'https://testarena.co.in/?tab=dashboard'
   },
   about: {
-    title: 'हमारे बारे में (About Test Arena) | CG State Exams Online Preparation Portal',
+    title: 'हमारे बारे में (About Test Arena) | CG State Exams Online Preparation Website',
     description: 'Test Arena (testarena.co.in) के बारे में जानें। हमारा लक्ष्य छत्तीसगढ़ के प्रतियोगी परीक्षार्थियों को उच्च गुणवत्तायुक्त, प्रामाणिक द्विभाषीय मॉक टेस्ट तथा अध्ययन सामग्री निःशुल्क उपलब्ध कराना है।',
-    keywords: 'About Test Arena, CGPSC Preparation Portal, Chhattisgarh Online Test Platform, Test Arena Mission',
+    keywords: 'About Test Arena, CGPSC Preparation Website, Chhattisgarh Online Test Platform, Test Arena Mission',
     canonical: 'https://testarena.co.in/?tab=about'
   },
   contact: {
@@ -57,14 +57,14 @@ const tabMetadata: Record<string, { title: string; description: string; keywords
   },
   terms: {
     title: 'नियम एवं शर्तें (Terms & Conditions) | Test Arena',
-    description: 'Test Arena पोर्टल के उपयोग की नियम और शर्तें। कृपया सेवा शर्तों को ध्यानपूर्वक पढ़ें।',
+    description: 'Test Arena वेबसाइट के उपयोग की नियम और शर्तें। कृपया सेवा शर्तों को ध्यानपूर्वक पढ़ें।',
     keywords: 'Test Arena Terms and Conditions, User Agreement Test Arena',
     canonical: 'https://testarena.co.in/?tab=terms'
   },
   disclaimer: {
-    title: 'अस्वीकरण (Disclaimer) | Non-Government Educational Portal - Test Arena',
-    description: 'Test Arena एक गैर-सरकारी निजी शैक्षणिक पोर्टल है। इस पोर्टल का CGPSC, CG Vyapam या किसी सरकारी एजेंसी से सीधा संबंध नहीं है।',
-    keywords: 'Test Arena Disclaimer, Non-government Portal Notice, Legal Disclaimer',
+    title: 'अस्वीकरण (Disclaimer) | Non-Government Educational Website - Test Arena',
+    description: 'Test Arena एक गैर-सरकारी निजी शैक्षणिक वेबसाइट है। इस वेबसाइट का CGPSC, CG Vyapam या किसी सरकारी एजेंसी से सीधा संबंध नहीं है।',
+    keywords: 'Test Arena Disclaimer, Non-government Website Notice, Legal Disclaimer',
     canonical: 'https://testarena.co.in/?tab=disclaimer'
   },
   admin: {

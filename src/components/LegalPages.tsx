@@ -69,7 +69,7 @@ export function PrivacyPolicy({ onBackToHome }: LegalPageProps) {
             <ul className="list-disc pl-5 space-y-1 text-slate-600">
               <li>To provide comprehensive performance tracking, weak area analysis, and custom dashboard metrics.</li>
               <li>To maintain secure leaderboard statistics and ensure honest practice across state competitors.</li>
-              <li>To handle your support requests, inquiries, or feedback submitted through our feedback portal, routing queries directly to <strong>testarena2026@gmail.com</strong>.</li>
+              <li>To handle your support requests, inquiries, or feedback submitted through our feedback form, routing queries directly to <strong>testarena2026@gmail.com</strong>.</li>
               <li>To prevent unauthorized duplication, automated crawling, or unauthorized commercialization of our bilingual question banks.</li>
             </ul>
           </section>
@@ -129,7 +129,7 @@ export function TermsConditions({ onBackToHome }: LegalPageProps) {
               By accessing, browsing, registering, or practicing on <strong>TestArena</strong> (testarena.co.in), you acknowledge that you have read, understood, and agreed to be legally bound by these Terms and Conditions. If you do not agree with any part of these terms, you must immediately cease using the platform.
             </p>
             <p className="text-slate-500 italic">
-              TestArena (testarena.co.in) का उपयोग, पंजीकरण या अभ्यास करके, आप स्वीकार करते हैं कि आपने इन नियमों और शर्तों को पढ़ और समझ लिया है तथा आप इनसे कानूनी रूप से बाध्य होने के लिए सहमत हैं। यदि आप इन नियमों से असहमत हैं, तो कृपया पोर्टल का उपयोग तुरंत बंद कर दें।
+              TestArena (testarena.co.in) का उपयोग, पंजीकरण या अभ्यास करके, आप स्वीकार करते हैं कि आपने इन नियमों और शर्तों को पढ़ और समझ लिया है तथा आप इनसे कानूनी रूप से बाध्य होने के लिए सहमत हैं। यदि आप इन नियमों से असहमत हैं, तो कृपया वेबसाइट का उपयोग तुरंत बंद कर दें।
             </p>
           </section>
 
@@ -215,10 +215,10 @@ export function Disclaimer({ onBackToHome }: LegalPageProps) {
               Non-Affiliation with Government Bodies (सरकारी निकायों से असंबद्धता)
             </h2>
             <p>
-              <strong>TestArena (testarena.co.in) is an independent, private educational and self-practice portal.</strong> It has no official affiliation, authorization, endorsement, or direct association with the Chhattisgarh Public Service Commission (CGPSC), CG Vyapam, or any government department, administrative agency, or ministry of the Chhattisgarh State Government or Government of India.
+              <strong>TestArena (testarena.co.in) is an independent, private educational and self-practice website.</strong> It has no official affiliation, authorization, endorsement, or direct association with the Chhattisgarh Public Service Commission (CGPSC), CG Vyapam, or any government department, administrative agency, or ministry of the Chhattisgarh State Government or Government of India.
             </p>
             <p className="text-slate-500 italic">
-              TestArena (testarena.co.in) एक स्वतंत्र, निजी शैक्षणिक और स्व-अभ्यास पोर्टल है। इसका छत्तीसगढ़ लोक सेवा आयोग (CGPSC), छत्तीसगढ़ व्यावसायिक परीक्षा मंडल (CG Vyapam), या छत्तीसगढ़ राज्य सरकार अथवा भारत सरकार के किसी भी सरकारी विभाग, प्रशासनिक एजेंसी या मंत्रालय के साथ कोई आधिकारिक संबंध, प्राधिकरण, समर्थन या सीधा जुड़ाव नहीं है।
+              TestArena (testarena.co.in) एक स्वतंत्र, निजी शैक्षणिक और स्व-अभ्यास वेबसाइट है। इसका छत्तीसगढ़ लोक सेवा आयोग (CGPSC), छत्तीसगढ़ व्यावसायिक परीक्षा मंडल (CG Vyapam), या छत्तीसगढ़ राज्य सरकार अथवा भारत सरकार के किसी भी सरकारी विभाग, प्रशासनिक एजेंसी या मंत्रालय के साथ कोई आधिकारिक संबंध, प्राधिकरण, समर्थन या सीधा जुड़ाव नहीं है।
             </p>
           </section>
 
@@ -228,7 +228,7 @@ export function Disclaimer({ onBackToHome }: LegalPageProps) {
               Accuracy of Questions & Model Answers (प्रश्नों और उत्तरों की सटीकता)
             </h2>
             <p>
-              While our administrative team makes every effort to ensure that the Previous Years Questions (PYQs), answers, explanation sheets, and current affairs topics listed on our portal are fully verified, authentic, and accurately transcribed from official archives:
+              While our administrative team makes every effort to ensure that the Previous Years Questions (PYQs), answers, explanation sheets, and current affairs topics listed on our website are fully verified, authentic, and accurately transcribed from official archives:
             </p>
             <ul className="list-disc pl-5 space-y-1 text-slate-600">
               <li>Slight transcription or translation discrepancies may occasionally occur. If any error is spotted, users should notify us at <strong>testarena2026@gmail.com</strong> for swift corrections.</li>
@@ -240,7 +240,7 @@ export function Disclaimer({ onBackToHome }: LegalPageProps) {
           <section className="space-y-3">
             <h2 className="text-base font-extrabold text-slate-900 border-b pb-1.5 border-slate-100 flex items-center gap-2">
               <span className="bg-emerald-100 text-emerald-800 w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold">3</span>
-              Practice Mock Nature of Platform (अभ्यास पोर्टल की प्रकृति)
+              Practice Mock Nature of Platform (अभ्यास वेबसाइट की प्रकृति)
             </h2>
             <p>
               All performance ratings, percentage scores, weak-subject breakdowns, and streak trackers provided on TestArena are mock training indicators intended solely for guidance and improvement. They do not guarantee identical performance, selection success, or guaranteed administrative placements in real-world CGPSC state exams.

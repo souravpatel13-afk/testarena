@@ -145,7 +145,7 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
                       localStorage.setItem('cg_student_exam', subExam);
                       if (subDistrict) localStorage.setItem('cg_student_district', subDistrict);
 
-                      await fetch('/api/students/subscribe', {
+                      const res = await fetch('/api/students/subscribe', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -156,6 +156,11 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
                           source: 'Home Top Alert Card'
                         })
                       });
+                      
+                      if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.error || 'सब्सक्राइब करने में विफल');
+                      }
                       
                       setLeadSuccessMsg(true);
                       setTimeout(() => {
@@ -395,7 +400,7 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
           </div>
         </div>
 
-        {/* Right Column: Portal Objectives (5 Columns) */}
+        {/* Right Column: Website Objectives (5 Columns) */}
         <div className="lg:col-span-5 space-y-6">
           <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6">
             <div className="space-y-1">
@@ -406,7 +411,7 @@ export default function Home({ onNavigate, questionsCount, quizzesCount, exams =
                 Our Core Objectives
               </h2>
               <p className="text-xs text-gray-500 leading-relaxed font-sans">
-                यह पोर्टल विशेष रूप से सभी गंभीर अभ्यर्थियों की स्व-अध्ययन शैली को मजबूत करने और उनका सही मार्गदर्शन करने हेतु तैयार किया गया है:
+                यह वेबसाइट विशेष रूप से सभी गंभीर अभ्यर्थियों की स्व-अध्ययन शैली को मजबूत करने और उनका सही मार्गदर्शन करने हेतु तैयार की गई है:
               </p>
             </div>
 

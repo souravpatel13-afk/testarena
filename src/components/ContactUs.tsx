@@ -53,7 +53,7 @@ export default function ContactUs() {
   const faqs = [
     {
       q: 'How many years of Previous Year Questions (PYQs) are available?',
-      a: 'The portal currently hosts authentic solved papers from CGPSC State Services Preliminary Exams spanning the last 5-10 years. We update our question library regularly with official answer keys.',
+      a: 'The website currently hosts authentic solved papers from CGPSC State Services Preliminary Exams spanning the last 5-10 years. We update our question library regularly with official answer keys.',
     },
     {
       q: 'Are solutions and explanations available after completing a test?',
@@ -125,7 +125,7 @@ export default function ContactUs() {
           <div className="p-5 bg-teal-900 text-teal-100 rounded-3xl space-y-2 shadow-inner">
             <h3 className="text-xs font-bold text-white uppercase tracking-wider">Note for Aspirants:</h3>
             <p className="text-[11px] leading-relaxed text-teal-200">
-              This is an independent self-study preparation portal. For official application forms, registration, or regulatory updates, please visit the official CGPSC website at <a href="https://psc.cg.gov.in" target="_blank" rel="noreferrer" className="underline text-white font-bold">psc.cg.gov.in</a>.
+              This is an independent self-study preparation website. For official application forms, registration, or regulatory updates, please visit the official CGPSC website at <a href="https://psc.cg.gov.in" target="_blank" rel="noreferrer" className="underline text-white font-bold">psc.cg.gov.in</a>.
             </p>
           </div>
         </div>

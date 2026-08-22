@@ -592,6 +592,128 @@ app.delete('/api/questions/:id', (req, res) => {
   res.json({ message: "Question deleted successfully", id: qId });
 });
 
+// Bulk append questions (Used by Subject-Wise HTML Parser, PYQ Importer & Daily Practice Sync)
+app.post('/api/questions/bulk', (req, res) => {
+  try {
+    const db = loadDatabase();
+    const newQuestions = req.body;
+    if (!Array.isArray(newQuestions)) {
+      return res.status(400).json({ error: "Request body must be an array of questions." });
+    }
+
+    db.questions = db.questions || [];
+    const formattedQuestions = newQuestions.map((q: any, idx: number) => {
+      const qId = q.id || `q-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`;
+      return {
+        ...q,
+        id: qId,
+        text_hi: (q.text_hi || q.text || q.questionHtml || '').toString().trim(),
+        text_en: (q.text_en || '').toString().trim(),
+        options_hi: Array.isArray(q.options_hi) ? q.options_hi : (Array.isArray(q.optionsHtml) ? q.optionsHtml : (q.options || ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"])),
+        options_en: Array.isArray(q.options_en) ? q.options_en : undefined,
+        correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : (typeof q.correct_answer === 'number' ? q.correct_answer : 0),
+        subject: (q.subject || 'छत्तीसगढ़ सामान्य ज्ञान').toString().trim(),
+        topic: (q.topic || 'सामान्य परिचय').toString().trim(),
+        exam: q.exam ? q.exam.toString().trim() : undefined,
+        year: q.year ? Number(q.year) : undefined,
+        explanation_hi: (q.explanation_hi || q.explanationHtml || '').toString().trim(),
+        explanation_en: (q.explanation_en || '').toString().trim(),
+        createdAt: q.createdAt || new Date().toISOString()
+      };
+    }).filter((q: any) => q.text_hi.length > 0);
+
+    if (formattedQuestions.length === 0) {
+      return res.status(400).json({ error: "कोई वैध प्रश्न नहीं मिले।" });
+    }
+
+    db.questions.push(...formattedQuestions);
+    saveDatabase(db);
+
+    console.log(`[Bulk Questions Added] Appended ${formattedQuestions.length} questions. Total questions now: ${db.questions.length}`);
+
+    res.status(201).json({
+      success: true,
+      message: `सफलतापूर्वक ${formattedQuestions.length} प्रश्न डेटाबेस में जोड़ दिए गए हैं!`,
+      count: formattedQuestions.length,
+      questions: formattedQuestions
+    });
+  } catch (err: any) {
+    console.error("Error in bulk questions:", err);
+    res.status(500).json({ error: "प्रश्नों को बल्क में जोड़ने में त्रुटि: " + err.message });
+  }
+});
+
+// Sync questions from Daily Practice Set directly into Subject-Wise Question Bank
+app.post('/api/daily-practice/sync-to-subjectwise', (req, res) => {
+  try {
+    const db = loadDatabase();
+    const { setId, targetSubject, targetTopic, questions: customQuestions } = req.body;
+
+    let sourceQuestions: any[] = [];
+    let defaultSub = targetSubject || 'छत्तीसगढ़ सामान्य ज्ञान';
+    let defaultTop = targetTopic || 'डेली प्रैक्टिस क्विज';
+
+    if (setId) {
+      const set = (db.dailyPractice || []).find((s: any) => s.id === setId);
+      if (!set) {
+        return res.status(404).json({ error: "डेली प्रैक्टिस सेट नहीं मिला।" });
+      }
+      sourceQuestions = set.questions || [];
+      if (!targetSubject) defaultSub = set.subject || 'छत्तीसगढ़ सामान्य ज्ञान';
+      if (!targetTopic) defaultTop = set.title || 'डेली प्रैक्टिस क्विज';
+    } else if (Array.isArray(customQuestions) && customQuestions.length > 0) {
+      sourceQuestions = customQuestions;
+    } else {
+      return res.status(400).json({ error: "setId या questions सूची प्रदान करना अनिवार्य है।" });
+    }
+
+    if (!sourceQuestions.length) {
+      return res.status(400).json({ error: "इस सेट में कोई प्रश्न उपलब्ध नहीं है।" });
+    }
+
+    db.questions = db.questions || [];
+
+    const convertedQuestions = sourceQuestions.map((q: any, idx: number) => {
+      // Clean question text and extract HTML content
+      const rawQ = q.questionHtml || q.text_hi || q.text || '';
+      const rawExp = q.explanationHtml || q.explanation_hi || '';
+      const rawOpts = q.optionsHtml || q.options_hi || ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"];
+      const correctAns = typeof q.correctAnswer === 'number' ? q.correctAnswer : 0;
+
+      return {
+        id: `q-sub-dp-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        text_hi: rawQ.trim(),
+        text_en: '',
+        options_hi: rawOpts,
+        correctAnswer: correctAns,
+        subject: defaultSub.trim(),
+        topic: defaultTop.trim(),
+        exam: undefined, // undefined makes it eligible for Subject Tests
+        year: undefined,
+        explanation_hi: rawExp.trim(),
+        explanation_en: '',
+        dailyPracticeSetId: setId || undefined,
+        createdAt: new Date().toISOString()
+      };
+    }).filter((q: any) => q.text_hi.length > 0);
+
+    db.questions.push(...convertedQuestions);
+    saveDatabase(db);
+
+    console.log(`[Daily Practice Synced to Subjectwise] Added ${convertedQuestions.length} questions under subject: "${defaultSub}" -> topic: "${defaultTop}".`);
+
+    res.status(201).json({
+      success: true,
+      message: `सफलतापूर्वक ${convertedQuestions.length} डेली क्विज प्रश्न '${defaultSub}' विषय के '${defaultTop}' टॉपिक में जोड़ दिए गए हैं!`,
+      count: convertedQuestions.length,
+      questions: convertedQuestions
+    });
+  } catch (err: any) {
+    console.error("Error syncing daily practice to subjectwise:", err);
+    res.status(500).json({ error: "विषय-वार में सिंक करने में त्रुटि: " + err.message });
+  }
+});
+
 // Replace all questions (full sync from Google Sheet)
 app.post('/api/questions/replace', (req, res) => {
   const db = loadDatabase();
@@ -1200,26 +1322,141 @@ app.post('/api/db/reset', (req, res) => {
   res.json({ message: "Database reset to initial seed data successfully!", db });
 });
 
+// Student WhatsApp Subscriptions & Exam Alert Leads
+app.post('/api/students/subscribe', (req, res) => {
+  try {
+    const db = loadDatabase();
+    const { name, mobile, targetExam, district, source } = req.body;
+    
+    if (!name || !name.trim() || !mobile || !mobile.trim()) {
+      return res.status(400).json({ error: "नाम (Name) एवं WhatsApp मोबाइल नंबर दर्ज करना अनिवार्य है।" });
+    }
+
+    const cleanMobile = mobile.trim();
+    const cleanName = name.trim();
+    const cleanExam = (targetExam && targetExam.trim()) || 'CGPSC Pre & CG Vyapam';
+    const cleanDistrict = (district && district.trim()) || '';
+    const cleanSource = (source && source.trim()) || 'WhatsApp Notification Section';
+
+    db.subscribers = db.subscribers || [];
+    
+    // Check if user already registered with this mobile number
+    const existingIdx = db.subscribers.findIndex((s: any) => 
+      s.mobile && s.mobile.replace(/[^0-9]/g, '') === cleanMobile.replace(/[^0-9]/g, '')
+    );
+
+    let savedSub: any;
+    if (existingIdx > -1) {
+      // Update existing lead
+      savedSub = {
+        ...db.subscribers[existingIdx],
+        name: cleanName,
+        mobile: cleanMobile,
+        targetExam: cleanExam,
+        district: cleanDistrict || db.subscribers[existingIdx].district,
+        source: cleanSource,
+        updatedAt: new Date().toISOString()
+      };
+      db.subscribers[existingIdx] = savedSub;
+    } else {
+      // Create new lead at top
+      savedSub = {
+        id: "sub-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5),
+        name: cleanName,
+        mobile: cleanMobile,
+        targetExam: cleanExam,
+        district: cleanDistrict,
+        source: cleanSource,
+        createdAt: new Date().toISOString()
+      };
+      db.subscribers.unshift(savedSub);
+    }
+
+    saveDatabase(db);
+    console.log(`[Student Lead Received] Name: ${cleanName}, Mobile: ${cleanMobile}, Exam: ${cleanExam}`);
+
+    res.status(201).json({
+      success: true,
+      message: "सफलतापूर्वक WhatsApp अलर्ट हेतु पंजीकरण हो गया है!",
+      subscriber: savedSub
+    });
+  } catch (err: any) {
+    console.error("Error saving subscriber:", err);
+    res.status(500).json({ error: "सब्सक्राइबर सहेजने में विफल: " + err.message });
+  }
+});
+
+// Admin get student subscribers
+app.get('/api/admin/students/subscribers', (req, res) => {
+  const db = loadDatabase();
+  const list = (db.subscribers || []).sort((a: any, b: any) => {
+    const timeA = new Date(a.createdAt || a.updatedAt || 0).getTime();
+    const timeB = new Date(b.createdAt || b.updatedAt || 0).getTime();
+    return timeB - timeA;
+  });
+  res.json(list);
+});
+
+// Admin delete student subscriber
+app.delete('/api/admin/students/subscribers/:id', (req, res) => {
+  const db = loadDatabase();
+  const { id } = req.params;
+  db.subscribers = (db.subscribers || []).filter((s: any) => s.id !== id);
+  saveDatabase(db);
+  res.json({ success: true, message: "विद्यार्थी रिकॉर्ड सफलतापूर्वक हटा दिया गया है।" });
+});
+
+// Admin get all feedbacks / reviews
+app.get('/api/admin/feedbacks', (req, res) => {
+  const db = loadDatabase();
+  const list = (db.feedbacks || []).sort((a: any, b: any) => {
+    const timeA = new Date(a.createdAt || a.timestamp || 0).getTime();
+    const timeB = new Date(b.createdAt || b.timestamp || 0).getTime();
+    return timeB - timeA;
+  });
+  res.json(list);
+});
+
+// Admin delete feedback
+app.delete('/api/admin/feedbacks/:id', (req, res) => {
+  const db = loadDatabase();
+  const { id } = req.params;
+  db.feedbacks = (db.feedbacks || []).filter((f: any) => f.id !== id);
+  saveDatabase(db);
+  res.json({ success: true, message: "फीडबैक रिकॉर्ड सफलतापूर्वक हटा दिया गया है।" });
+});
+
 // Feedback / Enquiry Endpoint
 app.post('/api/feedback', (req, res) => {
   const db = loadDatabase();
-  const { name, email, phone, queryType, message } = req.body;
-  if (!name || !email || !message) {
-    return res.status(400).json({ error: "Name, Email, and Message are required." });
+  const { name, email, phone, queryType, message, rating, comment, studentName, studentMobile, testTitle, scoreInfo } = req.body;
+  
+  const finalName = name || studentName || 'अनाम परीक्षार्थी';
+  const finalMessage = message || comment || '';
+  
+  if (!finalName && !finalMessage) {
+    return res.status(400).json({ error: "Name and Message/Comment are required." });
   }
 
   const newFeedback = {
     id: "fb-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5),
-    name,
-    email,
-    phone: phone || '',
+    name: finalName,
+    studentName: finalName,
+    email: email || '',
+    phone: phone || studentMobile || '',
+    studentMobile: phone || studentMobile || '',
     queryType: queryType || 'General Inquiry',
-    message,
+    testTitle: testTitle || queryType || 'सामान्य पूछताछ',
+    message: finalMessage,
+    comment: finalMessage,
+    rating: typeof rating === 'number' ? rating : 5,
+    scoreInfo: scoreInfo || '',
+    createdAt: new Date().toISOString(),
     timestamp: new Date().toISOString()
   };
 
   db.feedbacks = db.feedbacks || [];
-  db.feedbacks.push(newFeedback);
+  db.feedbacks.unshift(newFeedback);
   saveDatabase(db);
 
   console.log(`[Feedback/Enquiry] Target: testarena2026@gmail.com`, newFeedback);
@@ -1490,7 +1727,7 @@ app.delete('/api/daily-practice/:id', (req, res) => {
 // User Engagement Tracking Beacon (Records page views, duration & interactions)
 app.post('/api/track/engagement', (req, res) => {
   const db = loadDatabase();
-  const { tab, path, durationSeconds, device, referrer, timestamp } = req.body;
+  const { tab, path, durationSeconds, device, referrer, timestamp, clientId, userName, userMobile } = req.body;
   
   if (!db.engagementLogs) {
     db.engagementLogs = [];
@@ -1499,6 +1736,7 @@ app.post('/api/track/engagement', (req, res) => {
   const safeDuration = Math.min(Math.max(Number(durationSeconds) || 0, 1), 7200); // capped at 2 hours
   const safeTab = tab || 'home';
   const safeDevice = device || 'mobile';
+  const safeClientId = clientId || 'anon-' + Math.random().toString(36).substr(2, 9);
 
   db.engagementLogs.push({
     id: 'eng-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
@@ -1507,16 +1745,27 @@ app.post('/api/track/engagement', (req, res) => {
     durationSeconds: safeDuration,
     device: safeDevice,
     referrer: referrer || '',
+    clientId: safeClientId,
+    userName: userName || '',
+    userMobile: userMobile || '',
     timestamp: timestamp || new Date().toISOString()
   });
 
-  // Keep last 1500 records to prevent db bloating
-  if (db.engagementLogs.length > 1500) {
-    db.engagementLogs = db.engagementLogs.slice(-1500);
+  // Keep last 2500 records to prevent db bloating
+  if (db.engagementLogs.length > 2500) {
+    db.engagementLogs = db.engagementLogs.slice(-2500);
   }
 
   saveDatabase(db);
   res.json({ status: 'ok' });
+});
+
+// Clear engagement tracking logs (Reset to 0)
+app.post('/api/admin/engagement-stats/reset', (req, res) => {
+  const db = loadDatabase();
+  db.engagementLogs = [];
+  saveDatabase(db);
+  res.json({ message: "Analytics logs reset to 0 successfully", status: "ok" });
 });
 
 // Admin Engagement Statistics Summary Endpoint
@@ -1525,22 +1774,73 @@ app.get('/api/admin/engagement-stats', (req, res) => {
   const logs: any[] = db.engagementLogs || [];
   const attempts: any[] = db.attempts || [];
   const questions: any[] = db.questions || [];
-  const dpSets: any[] = db.dailyPractice || [];
+  const students: any[] = db.students || [];
 
-  const timeRange = req.query.range || 'all';
+  const timeRange = (req.query.range as string) || 'all';
   const now = Date.now();
 
+  // Filter logs by selected timeRange
   const filteredLogs = logs.filter(log => {
+    const logTime = new Date(log.timestamp).getTime();
+    if (isNaN(logTime)) return true;
     if (timeRange === 'today') {
-      const logTime = new Date(log.timestamp).getTime();
       return (now - logTime) <= 24 * 60 * 60 * 1000;
     }
     if (timeRange === '7days') {
-      const logTime = new Date(log.timestamp).getTime();
       return (now - logTime) <= 7 * 24 * 60 * 60 * 1000;
     }
     return true;
   });
+
+  // Filter test attempts by selected timeRange
+  const filteredAttempts = attempts.filter(att => {
+    const attTime = new Date(att.completedAt || att.timestamp || att.createdAt).getTime();
+    if (isNaN(attTime)) return true;
+    if (timeRange === 'today') {
+      return (now - attTime) <= 24 * 60 * 60 * 1000;
+    }
+    if (timeRange === '7days') {
+      return (now - attTime) <= 7 * 24 * 60 * 60 * 1000;
+    }
+    return true;
+  });
+
+  // Filter students/registered leads by selected timeRange
+  const filteredStudents = students.filter(st => {
+    const stTime = new Date(st.createdAt || st.timestamp).getTime();
+    if (isNaN(stTime)) return true;
+    if (timeRange === 'today') {
+      return (now - stTime) <= 24 * 60 * 60 * 1000;
+    }
+    if (timeRange === '7days') {
+      return (now - stTime) <= 7 * 24 * 60 * 60 * 1000;
+    }
+    return true;
+  });
+
+  // 1. Calculate Realtime Active Users (within last 3 minutes / 180 seconds)
+  const activeCutoff = now - (3 * 60 * 1000);
+  const activeClientSet = new Set<string>();
+  logs.forEach(log => {
+    const logTime = new Date(log.timestamp).getTime();
+    if (logTime >= activeCutoff) {
+      activeClientSet.add(log.clientId || log.id);
+    }
+  });
+  const realtimeActiveUsers = activeClientSet.size;
+
+  // 2. Calculate Unique Users for the selected time range
+  const uniqueClientSet = new Set<string>();
+  filteredLogs.forEach(log => {
+    if (log.clientId) uniqueClientSet.add(log.clientId);
+  });
+  filteredStudents.forEach((s: any) => {
+    if (s.mobile) uniqueClientSet.add(s.mobile);
+  });
+  filteredAttempts.forEach((a: any) => {
+    if (a.studentName) uniqueClientSet.add(a.studentName);
+  });
+  const totalUniqueUsers = uniqueClientSet.size;
 
   const tabMetadata: Record<string, { label: string; path: string; icon: string }> = {
     'daily-practice': { label: 'डेली प्रैक्टिस (Daily Practice)', path: '/?tab=daily-practice', icon: 'Sparkles' },
@@ -1575,10 +1875,10 @@ app.get('/api/admin/engagement-stats', (req, res) => {
     }
   });
 
-  // Calculate real metrics from actual database
-  const totalAttempts = attempts.length;
+  // Calculate real metrics from filtered test attempts
+  const totalAttempts = filteredAttempts.length;
   let totalQuestionsAnswered = 0;
-  attempts.forEach(a => {
+  filteredAttempts.forEach(a => {
     totalQuestionsAnswered += (a.totalQuestions || 0);
   });
 
@@ -1613,10 +1913,10 @@ app.get('/api/admin/engagement-stats', (req, res) => {
   // Sort pages by views / time spent descending
   pageStats.sort((a, b) => b.totalDurationSeconds - a.totalDurationSeconds);
 
-  // Popular Tests dynamically calculated from actual test attempts
+  // Popular Tests dynamically calculated from filtered test attempts
   const testAttemptCounts: Record<string, { title: string; type: string; count: number; totalScore: number }> = {};
   
-  attempts.forEach((att: any) => {
+  filteredAttempts.forEach((att: any) => {
     const title = att.title || att.quizTitle || att.testTitle || 'अभ्यास क्विज़';
     const type = att.type === 'pyq' ? 'PYQ Exam Paper' : att.type === 'dailyPractice' ? 'Daily Practice' : 'Subject Quiz';
     const key = title;
@@ -1640,17 +1940,31 @@ app.get('/api/admin/engagement-stats', (req, res) => {
   const mobPercent = totalDev > 0 ? Math.round((mobileCount / totalDev) * 100) : 0;
   const deskPercent = totalDev > 0 ? (100 - mobPercent) : 0;
 
-  // Real recent activity from logs
-  const recentActivity = filteredLogs.slice(-15).reverse().map(l => ({
-    tab: l.tab,
-    label: tabMetadata[l.tab]?.label || l.tab,
-    durationSeconds: l.durationSeconds,
-    device: l.device,
-    timestamp: l.timestamp
-  }));
+  // Real recent activity from filtered logs with active user identification
+  const recentActivity = filteredLogs.slice(-25).reverse().map(l => {
+    const logTime = new Date(l.timestamp).getTime();
+    const isCurrentlyActive = (now - logTime) <= (5 * 60 * 1000); // active in last 5 minutes
+    
+    // Find if user has a registered name/phone
+    const matchedStudent = students.find(s => s.mobile === l.userMobile || s.clientId === l.clientId);
+    const matchedAttempt = attempts.find(a => a.studentMobile === l.userMobile || a.studentName === l.userName);
+    const displayName = l.userName || matchedStudent?.name || matchedAttempt?.studentName || '';
+
+    return {
+      tab: l.tab,
+      label: tabMetadata[l.tab]?.label || l.tab,
+      durationSeconds: l.durationSeconds,
+      device: l.device,
+      userName: displayName,
+      isCurrentlyActive,
+      timestamp: l.timestamp
+    };
+  });
 
   res.json({
     summary: {
+      realtimeActiveUsers,
+      totalUniqueUsers,
       totalPageViews,
       totalActiveSessions: totalPageViews > 0 ? Math.max(1, Math.round(totalPageViews / 2.5)) : 0,
       totalTimeSpentSeconds: totalTimeSpent,

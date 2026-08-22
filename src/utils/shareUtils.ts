@@ -77,7 +77,7 @@ export function generateShareUrl(options: ShareOptions): string {
 export function generateShareMessage(options: ShareOptions): { title: string; text: string; url: string } {
   const url = generateShareUrl(options);
 
-  let title = 'TestArena - CGPSC & CG Vyapam Practice Portal';
+  let title = 'TestArena - CGPSC & CG Vyapam Practice Website';
   let messageBody = '';
 
   switch (options.type) {
@@ -152,12 +152,12 @@ ${url}`;
 
     case 'website':
     default:
-      title = 'TestArena - CGPSC & CG Vyapam Free Online Test Portal';
-      messageBody = `🎯 *TestArena (testarena.co.in) - CGPSC & व्यापमं टेस्ट पोर्टल* 🎯
+      title = 'TestArena - CGPSC & CG Vyapam Free Online Test Website';
+      messageBody = `🎯 *TestArena (testarena.co.in) - CGPSC & व्यापमं टेस्ट वेबसाइट* 🎯
 ----------------------------------------
 📚 CGPSC, CG व्यापमं, शिक्षक एवं सहायक शिक्षक भर्ती परीक्षा की संपूर्ण व निःशुल्क तैयारी!
 
-✨ *पोर्टल की मुख्य विशेषताएं:*
+✨ *वेबसाइट की मुख्य विशेषताएं:*
 ✅ छत्तीसगढ़ सामान्य ज्ञान एवं सभी विषयों के टॉपिक-वाइज टेस्ट
 ✅ पिछले वर्षों के हल प्रश्न पत्र (Official PYQs)
 ✅ शिक्षक एवं सहायक शिक्षक भर्ती स्पेशल डेली प्रैक्टिस सेट्स
